@@ -32,12 +32,12 @@
     .engines { display: inline-flex; background: var(--soft); border-radius: 7px; padding: 2px; }
     .engines button {
       font: inherit; font-size: 13px; border: 0; background: transparent; color: var(--muted);
-      padding: 3px 10px; border-radius: 5px; cursor: pointer;
+      padding: 3px 8px; border-radius: 5px; cursor: pointer; white-space: nowrap;
     }
     .engines button[aria-pressed="true"] { background: var(--bg); color: var(--fg); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.12); }
     select {
       font: inherit; font-size: 13px; color: var(--fg); background: var(--bg); border: 1px solid var(--line);
-      border-radius: 6px; padding: 3px 6px; margin-left: auto; max-width: 128px;
+      border-radius: 6px; padding: 3px 6px; margin-left: auto; max-width: 112px;
     }
     .icon-btn {
       font: inherit; font-size: 13px; border: 1px solid transparent; background: transparent; color: var(--muted);
@@ -48,6 +48,10 @@
     .body { padding: 10px 12px; overflow: auto; white-space: pre-wrap; word-break: break-word; user-select: text; }
     .body.loading { color: var(--muted); }
     .body.error { color: var(--danger); }
+    .busy { height: 3px; margin-top: 8px; background: var(--soft); border-radius: 2px; overflow: hidden; }
+    .busy i { display: block; width: 35%; height: 100%; background: var(--accent); border-radius: 2px; animation: dt-busy 1.2s ease-in-out infinite; }
+    @keyframes dt-busy { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
+    @media (prefers-reduced-motion: reduce) { .busy i { animation: none; width: 100%; opacity: .5; } }
     .source {
       color: var(--muted); font-size: 13px; border-left: 3px solid var(--line); padding-left: 8px; margin-bottom: 10px;
       display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; white-space: normal;
@@ -151,6 +155,7 @@
       this.pending = null;
       this.range = null;
       this.token += 1;
+      clearInterval(this.timer);
     }
 
     /** 아이콘 모드 — 선택 끝에 작은 「번」 단추만 보인다. */
@@ -179,16 +184,25 @@
       this.render();
       this.card.hidden = false;
       this.position();
-      if (this.engine === "google") this.translate();
+      if (this.translatesInPlace) this.translate();
+    }
+
+    /** 그 자리에서 번역하는 엔진인가(구글·내 PC). 파파고는 새 탭으로 연다. */
+    get translatesInPlace() {
+      return this.engine === "google" || this.engine === "local";
     }
 
     render() {
-      const engineButton = (engine, label) => {
-        const button = el("button", { type: "button", "aria-pressed": String(this.engine === engine), text: label });
+      const engineButton = (engine, label, title) => {
+        const button = el("button", { type: "button", "aria-pressed": String(this.engine === engine), text: label, title });
         button.addEventListener("click", () => this.setEngine(engine));
         return button;
       };
-      const engines = el("div", { class: "engines", role: "group", "aria-label": "번역 엔진" }, [engineButton("google", "구글"), engineButton("papago", "파파고 ↗")]);
+      const engines = el("div", { class: "engines", role: "group", "aria-label": "번역 엔진" }, [
+        engineButton("google", "구글", "구글 번역 — 글이 구글 서버로 갑니다"),
+        engineButton("papago", "파파고 ↗", "파파고 사이트를 새 탭으로 엽니다"),
+        engineButton("local", "내 PC", "PC 안의 언어 모델로 번역 — 밖으로 보내지 않습니다"),
+      ]);
 
       const select = el("select", { "aria-label": "번역할 언어", title: "번역할 언어" });
       for (const lang of DT.config.LANGUAGES) {
@@ -200,22 +214,27 @@
 
       const copy = el("button", { class: "icon-btn", type: "button", title: "번역문 복사", text: "복사" });
       copy.addEventListener("click", () => this.copy(copy));
-      copy.hidden = this.engine !== "google";
+      copy.hidden = !this.translatesInPlace;
       const close = el("button", { class: "icon-btn", type: "button", title: "닫기 (Esc)", "aria-label": "닫기", text: "✕" });
       close.addEventListener("click", () => (this.inline ? window.close() : this.hide()));
 
       this.body = el("div", { class: "body", "aria-live": "polite" });
-      this.detectedLabel = el("span", { text: "" });
-      const web = el("a", { href: "#", text: this.engine === "google" ? "구글 번역에서 열기 ↗" : "구글로 바로 보기" });
-      web.addEventListener("click", (event) => {
-        event.preventDefault();
-        if (this.engine === "google") DT.bridge.openTab(DT.engines.googleWebUrl(this.text, this.lang)).catch(() => {});
-        else this.setEngine("google");
-      });
+      this.detectedLabel = el("span", { text: this.engine === "local" ? "내 PC 번역 · 밖으로 보내지 않음" : "" });
+      const foot = [this.detectedLabel];
+      // 내 PC 번역 중에는 글을 밖으로 보내는 링크를 두지 않는다(보안 문서를 실수로 내보내지 않게).
+      if (this.engine !== "local") {
+        const web = el("a", { href: "#", text: this.engine === "google" ? "구글 번역에서 열기 ↗" : "구글로 바로 보기" });
+        web.addEventListener("click", (event) => {
+          event.preventDefault();
+          if (this.engine === "google") DT.bridge.openTab(DT.engines.googleWebUrl(this.text, this.lang)).catch(() => {});
+          else this.setEngine("google");
+        });
+        foot.push(web);
+      }
 
       const children = [el("div", { class: "head" }, [engines, select, copy, close]), this.body];
       if (this.clipped) children.push(el("div", { class: "note", text: `글이 길어 앞 ${DT.config.MAX_TEXT.toLocaleString("ko-KR")}자만 번역합니다.` }));
-      children.push(el("div", { class: "foot" }, [this.detectedLabel, web]));
+      children.push(el("div", { class: "foot" }, foot));
       this.card.replaceChildren(...children);
 
       if (this.engine === "papago") this.renderPapago();
@@ -237,14 +256,37 @@
       DT.bridge.openTab(DT.engines.papagoWebUrl(this.text, this.lang)).catch((error) => this.showError(error));
     }
 
+    /** 진행 표시 — 내 PC 번역은 구글보다 느려 지난 시간을 보이고 막대를 움직인다. */
+    showProgress(label) {
+      this.body.className = "body loading";
+      this.progressText = el("span", { text: label });
+      this.body.replaceChildren(this.progressText, el("div", { class: "busy", "aria-hidden": "true" }, [el("i")]));
+    }
+
+    startTimer(token, label) {
+      const started = Date.now();
+      clearInterval(this.timer);
+      this.timer = setInterval(() => {
+        if (token !== this.token || !this.progressText) return clearInterval(this.timer);
+        this.progressText.textContent = `${label} ${Math.round((Date.now() - started) / 1000)}초`;
+      }, 1000);
+    }
+
     async translate() {
       const token = ++this.token;
+      const engine = this.engine;
       this.result = "";
-      this.body.className = "body loading";
-      this.body.textContent = "번역 중…";
-      this.detectedLabel.textContent = "";
+      this.detectedLabel.textContent = engine === "local" ? "내 PC 번역 · 밖으로 보내지 않음" : "";
+      if (engine === "local") {
+        this.showProgress("내 PC에서 번역 중…");
+        this.startTimer(token, "내 PC에서 번역 중…");
+      } else {
+        this.body.className = "body loading";
+        this.body.textContent = "번역 중…";
+      }
+      this.position();
       try {
-        const reply = await DT.bridge.translate(this.text, this.lang);
+        const reply = await DT.bridge.translate(this.text, this.lang, engine);
         if (token !== this.token) return;
         this.result = reply.text;
         this.body.className = "body";
@@ -253,6 +295,8 @@
       } catch (error) {
         if (token !== this.token) return;
         this.showError(error);
+      } finally {
+        if (token === this.token) clearInterval(this.timer);
       }
       this.position();
     }
@@ -271,13 +315,13 @@
       DT.config.save({ engine }).catch(() => {});
       this.render();
       this.position();
-      if (engine === "google") this.translate();
+      if (this.translatesInPlace) this.translate();
     }
 
     setLang(code) {
       this.lang = code;
       DT.config.save({ targetLang: code }).catch(() => {});
-      if (this.engine === "google") this.translate();
+      if (this.translatesInPlace) this.translate();
     }
 
     async copy(button) {

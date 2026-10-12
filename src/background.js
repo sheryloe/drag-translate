@@ -12,24 +12,36 @@ const PDF_LINK_PATTERNS = ["*://*/*.pdf", "*://*/*.PDF", "*://*/*.pdf?*", "*://*
 
 /* ── 번역 ─────────────────────────────────────────── */
 
+/** 번역 결과를 메모리에만 담아 같은 글을 다시 묻지 않는다(디스크에는 남기지 않는다).
+ *  내 PC 번역은 몇 초씩 걸리므로 특히 쓸모가 있다. 오래된 것부터 버린다. */
 const cache = new Map();
-const CACHE_LIMIT = 100;
+const CACHE_LIMIT = 300;
+
+async function remember(key, work) {
+  if (cache.has(key)) {
+    const hit = cache.get(key);
+    cache.delete(key); // 최근에 쓴 것을 뒤로 보내 오래 남긴다.
+    cache.set(key, hit);
+    return hit;
+  }
+  const result = await work();
+  cache.set(key, result);
+  if (cache.size > CACHE_LIMIT) cache.delete(cache.keys().next().value);
+  return result;
+}
 
 async function translate(text, targetLang, engine) {
   const { text: clean } = engines.clip(text, config.MAX_TEXT);
   if (!clean) throw new Error("번역할 글이 없습니다.");
   const target = config.LANGUAGES.some((lang) => lang.code === targetLang) ? targetLang : config.DEFAULTS.targetLang;
   if (engine === "local") {
-    // 내 PC 번역 — 설정의 서버(내 PC 주소만)로 보낸다.
+    // 내 PC 번역 — 설정의 서버(내 PC 주소만)로 보낸다. 모델이 바뀌면 다시 번역한다.
     const settings = await config.load();
-    return local.translateLocal(clean, target, local.optionsFrom(settings));
+    const opts = local.optionsFrom(settings);
+    const key = ["local", opts.mode, opts.server, opts.model, target, clean].join("\u0000");
+    return remember(key, () => local.translateLocal(clean, target, opts));
   }
-  const key = `${target}\u0000${clean}`;
-  if (cache.has(key)) return cache.get(key);
-  const result = await engines.translateGoogle(clean, target);
-  cache.set(key, result);
-  if (cache.size > CACHE_LIMIT) cache.delete(cache.keys().next().value);
-  return result;
+  return remember(["google", target, clean].join("\u0000"), () => engines.translateGoogle(clean, target));
 }
 
 /* ── PDF 자동 열기 규칙 ─────────────────────────────── */
@@ -68,6 +80,7 @@ async function setupMenus() {
   await chrome.contextMenus.removeAll();
   chrome.contextMenus.create({ id: "dt-google", title: "구글로 번역: “%s”", contexts: ["selection"] });
   chrome.contextMenus.create({ id: "dt-papago", title: "파파고에서 번역: “%s”", contexts: ["selection"] });
+  chrome.contextMenus.create({ id: "dt-local", title: "내 PC로 번역: “%s”", contexts: ["selection"] });
   chrome.contextMenus.create({ id: "dt-pdf-link", title: "이 PDF를 번역 뷰어로 열기", contexts: ["link"], targetUrlPatterns: PDF_LINK_PATTERNS });
   chrome.contextMenus.create({
     id: "dt-pdf-page",
@@ -77,21 +90,24 @@ async function setupMenus() {
   });
 }
 
-function openResultWindow(text) {
-  return chrome.windows.create({ url: `${RESULT_PAGE}#${encodeURIComponent(text)}`, type: "popup", width: 460, height: 440 });
+/** 결과 창 — 엔진은 주소의 ?engine=, 글은 # 뒤에 담는다. */
+function openResultWindow(text, engine = "google") {
+  return chrome.windows.create({ url: `${RESULT_PAGE}?engine=${engine}#${encodeURIComponent(text)}`, type: "popup", width: 460, height: 440 });
 }
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   const settings = await config.load();
   const text = (info.selectionText || "").trim();
   switch (info.menuItemId) {
-    case "dt-google": {
+    case "dt-google":
+    case "dt-local": {
+      const engine = info.menuItemId === "dt-local" ? "local" : "google";
       // 크롬 기본 PDF 뷰어·크롬 내부 화면처럼 콘텐츠 스크립트가 없는 곳은 작은 결과 창으로 보인다.
-      if (!tab || tab.id === undefined || pdfUrl.isPdfUrl(tab.url)) return void openResultWindow(text);
+      if (!tab || tab.id === undefined || pdfUrl.isPdfUrl(tab.url)) return void openResultWindow(text, engine);
       try {
-        await chrome.tabs.sendMessage(tab.id, { type: "show-card", text, engine: "google" }, { frameId: info.frameId ?? 0 });
+        await chrome.tabs.sendMessage(tab.id, { type: "show-card", text, engine }, { frameId: info.frameId ?? 0 });
       } catch {
-        await openResultWindow(text);
+        await openResultWindow(text, engine);
       }
       return;
     }

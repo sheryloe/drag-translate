@@ -17,6 +17,8 @@
     $("enabled").checked = settings.enabled;
     $("ignoreEditable").checked = settings.ignoreEditable;
     $("pdfAutoOpen").checked = settings.pdfAutoOpen;
+    $("joinLines").checked = settings.joinLines;
+    $("copyFormat").value = settings.copyFormat;
     $("targetLang").value = settings.targetLang;
     $("minLength").value = String(settings.minLength);
     for (const radio of document.querySelectorAll('input[name="engine"]')) radio.checked = radio.value === settings.engine;
@@ -47,7 +49,8 @@
   paint(await DT.config.load());
   $("welcome").hidden = new URLSearchParams(location.search).get("welcome") !== "1" && !(await isFirstOpen());
 
-  for (const id of ["enabled", "ignoreEditable", "pdfAutoOpen"]) {
+  $("copyFormat").addEventListener("change", (event) => save({ copyFormat: event.target.value }));
+  for (const id of ["enabled", "ignoreEditable", "pdfAutoOpen", "joinLines"]) {
     $(id).addEventListener("change", (event) => save({ [id]: event.target.checked }));
   }
   $("targetLang").addEventListener("change", (event) => save({ targetLang: event.target.value }));

@@ -17,6 +17,8 @@ test("올바른 값은 그대로 남긴다", () => {
     minLength: 5,
     ignoreEditable: false,
     pdfAutoOpen: false,
+    joinLines: false,
+    copyFormat: "table",
     localMode: "openai",
     localServer: "http://127.0.0.1:1234",
     localModel: "qwen2.5-7b-instruct",

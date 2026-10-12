@@ -29,6 +29,7 @@
   /** 내 PC 번역 서버로 허용하는 이름 — 보안 문서가 PC 밖으로 나가지 않게 이 셋만 받는다. */
   const LOCAL_HOSTS = Object.freeze(["localhost", "127.0.0.1", "[::1]"]);
   const TRIGGERS = Object.freeze(["instant", "icon"]);
+  const COPY_FORMATS = Object.freeze(["translation", "pair", "table"]);
 
   /** 한 번에 번역하는 최대 글자 수(파파고 웹·구글 모두 이 안에서 안정적이다). */
   const MAX_TEXT = 5000;
@@ -41,6 +42,8 @@
     minLength: 2, // 이보다 짧은 선택은 무시
     ignoreEditable: true, // 입력칸·편집 영역 안의 선택은 무시
     pdfAutoOpen: true, // PDF 주소를 열면 번역 뷰어로 연다
+    joinLines: true, // PDF처럼 줄 끝마다 끊긴 문장을 합친 뒤 번역한다
+    copyFormat: "translation", // 복사 방식 — translation: 번역문만 · pair: 원문과 번역 나란히 · table: 표(원문|번역)
     localMode: "ollama", // 내 PC 번역 서버 방식 — ollama: Ollama · openai: LM Studio·llama.cpp 같은 OpenAI 호환 서버
     localServer: LOCAL_SERVERS.ollama, // 내 PC 번역 서버 주소(localhost·127.0.0.1·[::1]만)
     localModel: "translategemma:4b", // 번역에 쓸 모델 — 번역 전용 소형 모델(3.3GB)
@@ -85,6 +88,8 @@
     if (Number.isInteger(value.minLength) && value.minLength >= 1 && value.minLength <= 50) out.minLength = value.minLength;
     if (typeof value.ignoreEditable === "boolean") out.ignoreEditable = value.ignoreEditable;
     if (typeof value.pdfAutoOpen === "boolean") out.pdfAutoOpen = value.pdfAutoOpen;
+    if (typeof value.joinLines === "boolean") out.joinLines = value.joinLines;
+    if (COPY_FORMATS.includes(value.copyFormat)) out.copyFormat = value.copyFormat;
     if (LOCAL_MODES.includes(value.localMode)) out.localMode = value.localMode;
     const server = normalizeServerUrl(value.localServer);
     out.localServer = server || LOCAL_SERVERS[out.localMode];
@@ -123,6 +128,7 @@
     LANGUAGES,
     ENGINES,
     TRIGGERS,
+    COPY_FORMATS,
     LOCAL_MODES,
     LOCAL_SERVERS,
     LOCAL_HOSTS,

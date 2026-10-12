@@ -1,5 +1,5 @@
 /* 번역 창 — 글자를 드래그하면 선택 옆에 뜬다. 웹 페이지(콘텐츠 스크립트)·PDF 뷰어·결과 창이 함께 쓴다.
- * 페이지의 스타일과 섞이지 않게 그림자 DOM 안에 그린다. 필요한 것: DT.config · DT.engines · DT.bridge */
+ * 페이지의 스타일과 섞이지 않게 그림자 DOM 안에 그린다. 필요한 것: DT.config · DT.engines · DT.text · DT.bridge */
 (function (root) {
   "use strict";
 
@@ -29,7 +29,7 @@
     }
     .card.inline { position: static; width: 100%; max-height: none; box-shadow: none; }
     .head { display: flex; align-items: center; gap: 6px; padding: 8px 8px 8px 10px; border-bottom: 1px solid var(--line); }
-    .engines { display: inline-flex; background: var(--soft); border-radius: 7px; padding: 2px; }
+    .engines { flex: none; display: inline-flex; background: var(--soft); border-radius: 7px; padding: 2px; }
     .engines button {
       font: inherit; font-size: 13px; border: 0; background: transparent; color: var(--muted);
       padding: 3px 8px; border-radius: 5px; cursor: pointer; white-space: nowrap;
@@ -37,11 +37,11 @@
     .engines button[aria-pressed="true"] { background: var(--bg); color: var(--fg); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.12); }
     select {
       font: inherit; font-size: 13px; color: var(--fg); background: var(--bg); border: 1px solid var(--line);
-      border-radius: 6px; padding: 3px 6px; margin-left: auto; max-width: 112px;
+      border-radius: 6px; padding: 3px 4px; margin-left: auto; max-width: 96px; min-width: 0;
     }
     .icon-btn {
       font: inherit; font-size: 13px; border: 1px solid transparent; background: transparent; color: var(--muted);
-      border-radius: 6px; padding: 3px 7px; cursor: pointer; line-height: 1.2;
+      border-radius: 6px; padding: 3px 6px; cursor: pointer; line-height: 1.2; white-space: nowrap; flex: none;
     }
     .icon-btn:hover, .engines button:hover { color: var(--fg); background: var(--soft); }
     button:focus-visible, select:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
@@ -62,7 +62,9 @@
     }
     .hint { color: var(--muted); font-size: 12px; margin-top: 8px; white-space: normal; }
     .foot { display: flex; align-items: center; gap: 8px; padding: 6px 12px 8px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
-    .foot a { margin-left: auto; color: var(--accent); text-decoration: none; cursor: pointer; }
+    .foot a { margin-left: auto; color: var(--accent); text-decoration: none; cursor: pointer; white-space: nowrap; }
+    .foot select.copy-format { margin-left: auto; font-size: 12px; padding: 1px 4px; max-width: 150px; color: var(--muted); }
+    .foot select.copy-format + a { margin-left: 0; }
     .foot a:hover { text-decoration: underline; }
     .note { font-size: 12px; color: var(--muted); padding: 0 12px 8px; }
     .fab {
@@ -174,11 +176,15 @@
     open(rawText, settings, range, event) {
       this.ensure();
       this.fab.hidden = true;
-      const { text, clipped } = DT.engines.clip(rawText, DT.config.MAX_TEXT);
+      // PDF처럼 줄 끝마다 끊긴 문장은 합쳐서 번역해야 뜻이 바로 선다.
+      const prepared = settings.joinLines === false ? rawText : DT.text.joinBrokenLines(rawText);
+      const { text, clipped } = DT.engines.clip(prepared, DT.config.MAX_TEXT);
       this.text = text;
       this.clipped = clipped;
       this.engine = settings.engine;
       this.lang = settings.targetLang;
+      this.copyFormat = settings.copyFormat || DT.config.DEFAULTS.copyFormat;
+      this.pairs = null;
       this.range = range || null;
       this.fallbackRect = event ? pointRect(event) : null;
       this.render();
@@ -221,6 +227,17 @@
       this.body = el("div", { class: "body", "aria-live": "polite" });
       this.detectedLabel = el("span", { text: this.engine === "local" ? "내 PC 번역 · 밖으로 보내지 않음" : "" });
       const foot = [this.detectedLabel];
+      if (this.translatesInPlace) {
+        // 복사 방식 — 고른 것을 기억해 다음에도 쓴다.
+        const format = el("select", { class: "copy-format", "aria-label": "복사 방식", title: "「복사」를 누를 때 넣을 모양" });
+        for (const value of DT.text.COPY_FORMATS) {
+          const option = el("option", { value, text: `복사: ${DT.text.COPY_FORMAT_NAMES[value]}` });
+          if (value === this.copyFormat) option.selected = true;
+          format.append(option);
+        }
+        format.addEventListener("change", () => this.setCopyFormat(format.value));
+        foot.push(format);
+      }
       // 내 PC 번역 중에는 글을 밖으로 보내는 링크를 두지 않는다(보안 문서를 실수로 내보내지 않게).
       if (this.engine !== "local") {
         const web = el("a", { href: "#", text: this.engine === "google" ? "구글 번역에서 열기 ↗" : "구글로 바로 보기" });
@@ -324,13 +341,25 @@
       if (this.translatesInPlace) this.translate();
     }
 
+    /** 복사 — 고른 방식(번역문만·나란히·표)으로. 표는 HTML 표도 함께 넣어 엑셀·한글에 표로 붙는다. */
     async copy(button) {
       if (!this.result) return;
+      const pairs = this.pairs && this.pairs.length ? this.pairs : DT.text.pairParagraphs(this.text, this.result);
+      const { text, html } = DT.text.formatCopy(pairs, this.copyFormat);
       try {
-        await navigator.clipboard.writeText(this.result);
+        if (html && typeof ClipboardItem === "function") {
+          await navigator.clipboard.write([
+            new ClipboardItem({
+              "text/plain": new Blob([text], { type: "text/plain" }),
+              "text/html": new Blob([html], { type: "text/html" }),
+            }),
+          ]);
+        } else {
+          await navigator.clipboard.writeText(text);
+        }
       } catch {
         const area = el("textarea", {});
-        area.value = this.result;
+        area.value = text;
         this.card.append(area);
         area.select();
         document.execCommand("copy");
@@ -338,6 +367,11 @@
       }
       button.textContent = "복사됨";
       setTimeout(() => (button.textContent = "복사"), 1200);
+    }
+
+    setCopyFormat(format) {
+      this.copyFormat = format;
+      DT.config.save({ copyFormat: format }).catch(() => {});
     }
 
     /** 선택 아래에 두고, 아래 자리가 모자라면 위로 올린다. 화면 밖으로 나가지 않게 한다. */

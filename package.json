@@ -1,13 +1,14 @@
 {
   "name": "drag-translate",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
-  "description": "웹 페이지와 PDF에서 드래그한 글을 구글(바로)·파파고(새 탭)로 번역하는 크롬 확장 프로그램",
+  "description": "웹 페이지와 PDF에서 드래그한 글을 구글(바로)·파파고(새 탭)·내 PC 언어 모델(밖으로 보내지 않음)로 번역하는 크롬 확장 프로그램",
   "scripts": {
     "test": "node --test \"test/*.test.js\"",
     "vendor": "node scripts/vendor-pdfjs.mjs",
     "icons": "node scripts/make-icons.mjs",
-    "bench:local": "node scripts/bench-local.mjs"
+    "bench:local": "node scripts/bench-local.mjs",
+    "pack": "node scripts/pack.mjs"
   },
   "devDependencies": {
     "pdfjs-dist": "6.4.299"

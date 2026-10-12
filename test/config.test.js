@@ -20,6 +20,7 @@ test("올바른 값은 그대로 남긴다", () => {
     localMode: "openai",
     localServer: "http://127.0.0.1:1234",
     localModel: "qwen2.5-7b-instruct",
+    localVisionModel: "",
     localTimeout: 300,
   };
   assert.deepEqual(config.normalize(value), value);

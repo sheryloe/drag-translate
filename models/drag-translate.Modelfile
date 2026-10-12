@@ -1,0 +1,5 @@
+# 드래그 번역 맞춤 모델 — 만들기: ollama create drag-translate -f models/drag-translate.Modelfile
+FROM translategemma:4b
+PARAMETER temperature 0.1
+PARAMETER num_ctx 2048
+PARAMETER num_predict 1024

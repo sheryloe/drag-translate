@@ -1,8 +1,8 @@
 /* 서비스 워커 — 번역 요청을 보내고, 우클릭 메뉴와 「PDF를 번역 뷰어로 열기」 규칙을 관리한다.
  * 구글 번역과 내 PC 번역 서버 요청은 모두 여기서 보낸다(페이지의 보안 정책에 막히지 않게). */
-importScripts("shared/config.js", "shared/engines.js", "shared/local-llm.js", "shared/pdf-url.js");
+importScripts("shared/config.js", "shared/engines.js", "shared/local-llm.js", "shared/models.js", "shared/pdf-url.js");
 
-const { config, engines, local, pdfUrl } = self.DT;
+const { config, engines, local, models, pdfUrl } = self.DT;
 
 const VIEWER_PAGE = chrome.runtime.getURL("src/pdf/viewer.html");
 const RESULT_PAGE = chrome.runtime.getURL("src/result/result.html");
@@ -119,6 +119,21 @@ async function handle(message, sender) {
       const opts = { ...local.optionsFrom(settings), ...(message.opts || {}) };
       return { ok: true, ...(await local.testConnection(opts, settings.targetLang)) };
     }
+    case "local-models": {
+      const settings = await config.load();
+      return { ok: true, models: await local.listModels(local.optionsFrom(settings)) };
+    }
+    case "local-create": {
+      // 맞춤 모델 만들기 — 설정 화면에서 사용자가 눌렀을 때만. 정해 둔 정의(models.js)만 만든다.
+      if (!fromExtensionPage(sender)) throw new Error("설정 화면에서만 할 수 있습니다.");
+      const custom = models.CUSTOM_MODELS.find((item) => item.name === message.name);
+      if (!custom) throw new Error("알 수 없는 맞춤 모델입니다.");
+      const settings = await config.load();
+      // 만들기는 바탕 모델을 복사하므로 번역보다 오래 걸릴 수 있어 넉넉히 기다린다.
+      const opts = { ...local.optionsFrom(settings), timeout: Math.max(settings.localTimeout, 300) };
+      await local.ollamaPost(opts, "/api/create", models.createRequestBody(custom));
+      return { ok: true, name: custom.name };
+    }
     case "open-tab": {
       const url = String(message.url || "");
       let host = "";
@@ -144,6 +159,37 @@ async function handle(message, sender) {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   handle(message, sender).then(sendResponse, (error) => sendResponse({ ok: false, error: error && error.message ? error.message : String(error) }));
   return true;
+});
+
+/** 확장 자신의 화면(설정·팝업)에서 온 요청인가 — 웹 페이지 위의 콘텐츠 스크립트와 구별한다. */
+function fromExtensionPage(sender) {
+  return Boolean(sender && typeof sender.url === "string" && sender.url.startsWith(chrome.runtime.getURL("")));
+}
+
+/* ── 모델 받기(진행률을 길게 보내야 해서 연결(port)로 주고받는다) ─────── */
+
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name !== "local-pull" || !fromExtensionPage(port.sender)) return;
+  const controller = new AbortController();
+  port.onDisconnect.addListener(() => controller.abort());
+  port.onMessage.addListener(async (message) => {
+    try {
+      const settings = await config.load();
+      await local.pullModel(
+        local.optionsFrom(settings),
+        String(message && message.model),
+        (line) => {
+          const progress = models.parsePullLine(line);
+          if (progress) port.postMessage(progress);
+        },
+        undefined,
+        controller.signal,
+      );
+      port.postMessage({ finished: true });
+    } catch (error) {
+      if (!controller.signal.aborted) port.postMessage({ error: error && error.message ? error.message : String(error) });
+    }
+  });
 });
 
 /* ── 시작 ─────────────────────────────────────────── */

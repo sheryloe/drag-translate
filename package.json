@@ -6,7 +6,8 @@
   "scripts": {
     "test": "node --test \"test/*.test.js\"",
     "vendor": "node scripts/vendor-pdfjs.mjs",
-    "icons": "node scripts/make-icons.mjs"
+    "icons": "node scripts/make-icons.mjs",
+    "bench:local": "node scripts/bench-local.mjs"
   },
   "devDependencies": {
     "pdfjs-dist": "6.4.299"

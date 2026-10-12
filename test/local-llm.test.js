@@ -2,28 +2,10 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const config = require("../src/shared/config.js");
 const local = require("../src/shared/local-llm.js");
+const { fakeFetch } = require("./fake-fetch.js");
 
 const OLLAMA = { mode: "ollama", server: "http://localhost:11434", model: "qwen2.5:7b", timeout: 5 };
 const OPENAI = { mode: "openai", server: "http://127.0.0.1:1234", model: "local-model", timeout: 5 };
-
-/** 가짜 fetch — 주소와 요청을 적어 두고 정해 둔 응답을 돌려준다. */
-function fakeFetch(reply) {
-  const calls = [];
-  const impl = async (url, init) => {
-    calls.push({ url, init, body: init && init.body ? JSON.parse(init.body) : null });
-    const value = typeof reply === "function" ? reply(url, init) : reply;
-    if (value instanceof Error) throw value;
-    const { status = 200, json = {}, text } = value;
-    return {
-      ok: status >= 200 && status < 300,
-      status,
-      json: async () => json,
-      text: async () => (text !== undefined ? text : JSON.stringify(json)),
-    };
-  };
-  impl.calls = calls;
-  return impl;
-}
 
 test("서버 주소는 localhost·127.0.0.1·[::1]만 받는다", () => {
   assert.equal(config.normalizeServerUrl("http://localhost:11434/"), "http://localhost:11434");
@@ -115,7 +97,11 @@ test("오류 문구 — 서버 꺼짐·시간 초과·출처 막힘·모델 없�
   await assert.rejects(local.translateLocal("a", "ko", OLLAMA, fakeFetch({ status: 403, text: "" })), /OLLAMA_ORIGINS/);
   await assert.rejects(
     local.translateLocal("a", "ko", OLLAMA, fakeFetch({ status: 404, json: { error: 'model "qwen2.5:7b" not found, try pulling it first' } })),
-    /모델 「qwen2\.5:7b」이\(가\) 내 PC에 없습니다\. 명령 창에서 「ollama pull qwen2\.5:7b」/,
+    /모델 「qwen2\.5:7b」이\(가\) 내 PC에 없습니다\. 설정 화면의 「받기」를 누르거나 명령 창에서 「ollama pull qwen2\.5:7b」/,
+  );
+  await assert.rejects(
+    local.translateLocal("a", "ko", { ...OLLAMA, model: "drag-translate" }, fakeFetch({ status: 404, json: { error: "model 'drag-translate' not found" } })),
+    /맞춤 모델 「drag-translate」이\(가\) 아직 없습니다\. 설정 화면의 「맞춤 모델 만들기」/,
   );
   await assert.rejects(
     local.translateLocal("a", "ko", OPENAI, fakeFetch({ status: 400, json: { error: { message: "No models loaded. Please load a model." } } })),

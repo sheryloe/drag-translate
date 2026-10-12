@@ -43,7 +43,8 @@
     pdfAutoOpen: true, // PDF 주소를 열면 번역 뷰어로 연다
     localMode: "ollama", // 내 PC 번역 서버 방식 — ollama: Ollama · openai: LM Studio·llama.cpp 같은 OpenAI 호환 서버
     localServer: LOCAL_SERVERS.ollama, // 내 PC 번역 서버 주소(localhost·127.0.0.1·[::1]만)
-    localModel: "qwen2.5:7b", // 번역에 쓸 모델 이름
+    localModel: "translategemma:4b", // 번역에 쓸 모델 — 번역 전용 소형 모델(3.3GB)
+    localVisionModel: "qwen3-vl:2b-instruct", // 그림 속 글자를 읽을 모델 — 소형 시각 모델(1.9GB). 비우면 번역 모델로 읽는다
     localTimeout: 120, // 내 PC 번역 서버의 답을 기다리는 시간(초)
   });
 
@@ -88,6 +89,7 @@
     const server = normalizeServerUrl(value.localServer);
     out.localServer = server || LOCAL_SERVERS[out.localMode];
     if (typeof value.localModel === "string" && value.localModel.trim() && value.localModel.trim().length <= 200) out.localModel = value.localModel.trim();
+    if (typeof value.localVisionModel === "string" && value.localVisionModel.trim().length <= 200) out.localVisionModel = value.localVisionModel.trim();
     if (Number.isInteger(value.localTimeout) && value.localTimeout >= 10 && value.localTimeout <= 600) out.localTimeout = value.localTimeout;
     return out;
   }

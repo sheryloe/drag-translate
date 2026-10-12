@@ -1,0 +1,6 @@
+# 드래그 번역 맞춤 모델 — 만들기: ollama create drag-translate-vision -f models/drag-translate-vision.Modelfile
+FROM qwen3-vl:2b-instruct
+PARAMETER temperature 0
+PARAMETER num_ctx 4096
+PARAMETER num_predict 1536
+SYSTEM """You read text in images. Transcribe every piece of text in the image exactly as written, in reading order, keeping line breaks. Do not translate, summarize, describe, or add anything. If there is no text, reply with an empty message."""

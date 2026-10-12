@@ -17,6 +17,8 @@
   const api = {
     translate: (text, targetLang, engine) => call({ type: "translate", text, targetLang, engine }),
     testLocal: (opts) => call({ type: "local-test", opts }),
+    listLocalModels: () => call({ type: "local-models" }),
+    createLocalModel: (name) => call({ type: "local-create", name }),
     openTab: (url) => call({ type: "open-tab", url }),
   };
   root.DT = Object.assign(root.DT || {}, { bridge: api });

@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="popup.css" />
     <script src="../shared/config.js"></script>
     <script src="../shared/pdf-url.js"></script>
+    <script src="../shared/bridge.js"></script>
     <script src="popup.js" defer></script>
   </head>
   <body>
@@ -23,9 +24,17 @@
       <div class="field">
         <span class="label">번역 엔진</span>
         <div class="segmented" role="radiogroup" aria-label="번역 엔진">
-          <label><input type="radio" name="engine" value="google" /><span>구글 바로</span></label>
-          <label><input type="radio" name="engine" value="papago" /><span>파파고 새 탭</span></label>
+          <label title="선택 옆에 바로 번역"><input type="radio" name="engine" value="google" /><span>구글</span></label>
+          <label title="파파고 사이트를 새 탭으로"><input type="radio" name="engine" value="papago" /><span>파파고</span></label>
+          <label title="PC 안의 언어 모델로 번역(밖으로 보내지 않음)"><input type="radio" name="engine" value="local" /><span>내 PC</span></label>
         </div>
+      </div>
+      <div id="localRow" class="local" hidden>
+        <div class="row">
+          <span class="muted" id="localInfo"></span>
+          <button id="localTest" class="btn small" type="button">연결 시험</button>
+        </div>
+        <p id="localResult" class="result" role="status"></p>
       </div>
       <div class="field">
         <label class="label" for="targetLang">번역할 언어</label>

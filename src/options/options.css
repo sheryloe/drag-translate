@@ -51,9 +51,34 @@ body {
   gap: 8px;
 }
 
-#minLength {
+#minLength,
+#localTimeout {
   width: 72px;
   text-align: right;
+}
+
+#localServer,
+#localModel {
+  width: 220px;
+}
+
+.note {
+  margin: 0 0 4px;
+  font-size: 13px;
+}
+
+.result {
+  margin: 0;
+  font-size: 13px;
+  white-space: pre-wrap;
+}
+
+.result.ok {
+  color: var(--ok);
+}
+
+.result.error {
+  color: var(--danger);
 }
 
 @media (max-width: 560px) {

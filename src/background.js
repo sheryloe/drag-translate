@@ -1,7 +1,8 @@
-/* 서비스 워커 — 번역 요청을 보내고, 우클릭 메뉴와 「PDF를 번역 뷰어로 열기」 규칙을 관리한다. */
-importScripts("shared/config.js", "shared/engines.js", "shared/pdf-url.js");
+/* 서비스 워커 — 번역 요청을 보내고, 우클릭 메뉴와 「PDF를 번역 뷰어로 열기」 규칙을 관리한다.
+ * 구글 번역과 내 PC 번역 서버 요청은 모두 여기서 보낸다(페이지의 보안 정책에 막히지 않게). */
+importScripts("shared/config.js", "shared/engines.js", "shared/local-llm.js", "shared/pdf-url.js");
 
-const { config, engines, pdfUrl } = self.DT;
+const { config, engines, local, pdfUrl } = self.DT;
 
 const VIEWER_PAGE = chrome.runtime.getURL("src/pdf/viewer.html");
 const RESULT_PAGE = chrome.runtime.getURL("src/result/result.html");
@@ -14,10 +15,15 @@ const PDF_LINK_PATTERNS = ["*://*/*.pdf", "*://*/*.PDF", "*://*/*.pdf?*", "*://*
 const cache = new Map();
 const CACHE_LIMIT = 100;
 
-async function translate(text, targetLang) {
+async function translate(text, targetLang, engine) {
   const { text: clean } = engines.clip(text, config.MAX_TEXT);
   if (!clean) throw new Error("번역할 글이 없습니다.");
   const target = config.LANGUAGES.some((lang) => lang.code === targetLang) ? targetLang : config.DEFAULTS.targetLang;
+  if (engine === "local") {
+    // 내 PC 번역 — 설정의 서버(내 PC 주소만)로 보낸다.
+    const settings = await config.load();
+    return local.translateLocal(clean, target, local.optionsFrom(settings));
+  }
   const key = `${target}\u0000${clean}`;
   if (cache.has(key)) return cache.get(key);
   const result = await engines.translateGoogle(clean, target);
@@ -106,7 +112,13 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 async function handle(message, sender) {
   switch (message && message.type) {
     case "translate":
-      return { ok: true, ...(await translate(message.text, message.targetLang)) };
+      return { ok: true, ...(await translate(message.text, message.targetLang, message.engine)) };
+    case "local-test": {
+      // 설정 화면에서 바꾼 값으로 바로 시험할 수 있게 받은 값을 먼저 쓴다.
+      const settings = await config.load();
+      const opts = { ...local.optionsFrom(settings), ...(message.opts || {}) };
+      return { ok: true, ...(await local.testConnection(opts, settings.targetLang)) };
+    }
     case "open-tab": {
       const url = String(message.url || "");
       let host = "";

@@ -19,6 +19,8 @@
     $("state").textContent = settings.enabled ? "드래그하면 바로 번역합니다" : "꺼져 있습니다";
     for (const radio of document.querySelectorAll('input[name="engine"]')) radio.checked = radio.value === settings.engine;
     $("targetLang").value = settings.targetLang;
+    $("localRow").hidden = settings.engine !== "local";
+    $("localInfo").textContent = `${settings.localModel} · ${settings.localServer.replace(/^https?:\/\//, "")}`;
   }
 
   paint(await DT.config.load());
@@ -28,6 +30,23 @@
     radio.addEventListener("change", async () => paint(await DT.config.save({ engine: radio.value })));
   }
   $("targetLang").addEventListener("change", async (event) => paint(await DT.config.save({ targetLang: event.target.value })));
+
+  $("localTest").addEventListener("click", async () => {
+    const result = $("localResult");
+    $("localTest").disabled = true;
+    result.className = "result";
+    result.textContent = "시험하는 중…";
+    try {
+      const reply = await DT.bridge.testLocal();
+      result.className = "result ok";
+      result.textContent = `연결됐습니다. 시험 번역: ${reply.sample}`;
+    } catch (error) {
+      result.className = "result error";
+      result.textContent = error && error.message ? error.message : String(error);
+    } finally {
+      $("localTest").disabled = false;
+    }
+  });
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (tab && DT.pdfUrl.isPdfUrl(tab.url)) {

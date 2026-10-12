@@ -8,6 +8,7 @@
   --accent: #2f6feb;
   --accent-fg: #ffffff;
   --ok: #1f7a4d;
+  --danger: #c0392b;
   color-scheme: light;
 }
 
@@ -21,6 +22,7 @@
     --accent: #6c9cff;
     --accent-fg: #0d1320;
     --ok: #6fd3a0;
+    --danger: #ff8a7a;
     color-scheme: dark;
   }
 }
@@ -72,7 +74,8 @@ a:focus-visible {
 }
 
 select,
-input[type="number"] {
+input[type="number"],
+input[type="text"] {
   background: var(--bg);
   border: 1px solid var(--line);
   border-radius: 7px;

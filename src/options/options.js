@@ -21,13 +21,21 @@
     $("minLength").value = String(settings.minLength);
     for (const radio of document.querySelectorAll('input[name="engine"]')) radio.checked = radio.value === settings.engine;
     for (const radio of document.querySelectorAll('input[name="trigger"]')) radio.checked = radio.value === settings.trigger;
+    for (const radio of document.querySelectorAll('input[name="localMode"]')) radio.checked = radio.value === settings.localMode;
+    $("localServer").value = settings.localServer;
+    $("localModel").value = settings.localModel;
+    $("localTimeout").value = String(settings.localTimeout);
+  }
+
+  function showStatus(text) {
+    $("status").textContent = text;
+    clearTimeout(statusTimer);
+    statusTimer = setTimeout(() => ($("status").textContent = ""), 3000);
   }
 
   async function save(patch) {
     paint(await DT.config.save(patch));
-    $("status").textContent = "저장했습니다.";
-    clearTimeout(statusTimer);
-    statusTimer = setTimeout(() => ($("status").textContent = ""), 1500);
+    showStatus("저장했습니다.");
   }
 
   paint(await DT.config.load());
@@ -38,6 +46,60 @@
   }
   $("targetLang").addEventListener("change", (event) => save({ targetLang: event.target.value }));
   $("minLength").addEventListener("change", (event) => save({ minLength: Number(event.target.value) }));
+  /* ── 내 PC 번역 ── */
+  for (const radio of document.querySelectorAll('input[name="localMode"]')) {
+    radio.addEventListener("change", async () => {
+      // 다른 방식의 기본 주소를 쓰고 있었다면 고른 방식의 기본 주소로 함께 바꾼다.
+      const current = await DT.config.load();
+      const servers = DT.config.LOCAL_SERVERS;
+      const patch = { localMode: radio.value };
+      if (Object.values(servers).includes(current.localServer)) patch.localServer = servers[radio.value];
+      save(patch);
+    });
+  }
+  $("localServer").addEventListener("change", async (event) => {
+    const server = DT.config.normalizeServerUrl(event.target.value);
+    if (!server) {
+      paint(await DT.config.load());
+      showLocalResult("서버 주소는 localhost·127.0.0.1·[::1]만 쓸 수 있습니다. 보안 문서가 PC 밖으로 나가지 않게 하려는 것입니다.", "error");
+      return;
+    }
+    save({ localServer: server });
+  });
+  $("localModel").addEventListener("change", (event) => save({ localModel: event.target.value.trim() }));
+  $("localTimeout").addEventListener("change", (event) => save({ localTimeout: Number(event.target.value) }));
+
+  function showLocalResult(text, kind) {
+    $("localResult").textContent = text;
+    $("localResult").className = `result ${kind || ""}`;
+  }
+
+  $("localTest").addEventListener("click", async () => {
+    const button = $("localTest");
+    button.disabled = true;
+    showLocalResult("시험하는 중… 모델을 처음 불러올 때는 수십 초 걸릴 수 있습니다.");
+    try {
+      const reply = await DT.bridge.testLocal();
+      fillModels(reply.models);
+      showLocalResult(`연결됐습니다. (${(reply.ms / 1000).toFixed(1)}초)\n시험 번역: ${reply.sample}`, "ok");
+    } catch (error) {
+      showLocalResult(error && error.message ? error.message : String(error), "error");
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  function fillModels(models) {
+    if (!Array.isArray(models)) return;
+    $("localModels").replaceChildren(
+      ...models.map((name) => {
+        const option = document.createElement("option");
+        option.value = name;
+        return option;
+      }),
+    );
+  }
+
   for (const name of ["engine", "trigger"]) {
     for (const radio of document.querySelectorAll(`input[name="${name}"]`)) {
       radio.addEventListener("change", () => save({ [name]: radio.value }));

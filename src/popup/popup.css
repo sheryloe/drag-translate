@@ -34,6 +34,43 @@ body {
   font-size: 13px;
 }
 
+.local {
+  padding: 8px 0 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.local .row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.btn.small {
+  padding: 4px 10px;
+  font-size: 12px;
+  flex: none;
+}
+
+.result {
+  margin: 6px 0 0;
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+.result:empty {
+  display: none;
+}
+
+.result.ok {
+  color: var(--ok);
+}
+
+.result.error {
+  color: var(--danger);
+}
+
 body.off .panel {
   opacity: 0.55;
 }

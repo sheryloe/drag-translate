@@ -25,12 +25,14 @@
         let prev = "";
         for (const line of lines) {
           if (!line) continue;
+          // 앞 줄이 폭의 60%도 안 되면 문장 중간에서 끊긴 줄이 아니라 제목·문단 끝이다(PDF 본문 줄은 거의 꽉 찬다).
+          const shortLine = longest >= 30 && prev.length < longest * 0.6;
           if (!out) {
             out = line;
-          } else if (LIST_MARK.test(line) || (SENTENCE_END.test(prev) && prev.length < longest * 0.7)) {
-            out += `\n${line}`;
           } else if (/[A-Za-zÀ-ɏ]-$/.test(prev) && /^[a-zß-ÿ]/.test(line)) {
             out = out.slice(0, -1) + line;
+          } else if (LIST_MARK.test(line) || shortLine || (SENTENCE_END.test(prev) && prev.length < longest * 0.7)) {
+            out += `\n${line}`;
           } else if (NO_SPACE.test(prev.slice(-1)) && NO_SPACE.test(line[0])) {
             out += line;
           } else {
@@ -91,7 +93,137 @@
     return { text: list.map((pair) => pair.translation).join("\n\n") };
   }
 
-  const api = { joinBrokenLines, paragraphs, pairParagraphs, COPY_FORMATS, COPY_FORMAT_NAMES, tsvCell, formatCopy };
+  /* ── 긴 글 나누기(6단계) ── */
+
+  /** 한 번에 보내는 글자 수 — 작은 모델이 문맥 2048 안에서 지시문·원문·번역을 모두 담고 빨리 답하는 크기. */
+  const CHUNK_SIZE = 700;
+
+  /** 문장 끝에서 자른다. 문장 하나가 max보다 길면 빈칸 자리에서, 그것도 없으면 max에서 자른다. */
+  function splitSentences(paragraph, max) {
+    const sentences = paragraph.split(/(?<=[.!?。！？…])\s+/).filter(Boolean);
+    const pieces = [];
+    let current = "";
+    const push = (piece) => {
+      if (piece) pieces.push(piece);
+    };
+    for (let sentence of sentences) {
+      while (sentence.length > max) {
+        const cut = sentence.lastIndexOf(" ", max) > max / 2 ? sentence.lastIndexOf(" ", max) : max;
+        push(current);
+        current = "";
+        push(sentence.slice(0, cut).trim());
+        sentence = sentence.slice(cut).trim();
+      }
+      if (current && current.length + 1 + sentence.length > max) {
+        push(current);
+        current = sentence;
+      } else {
+        current = current ? `${current} ${sentence}` : sentence;
+      }
+    }
+    push(current);
+    return pieces;
+  }
+
+  /** 번역용으로 나누기 — 짧은 문단은 줄바꿈째 묶어 요청 수를 줄이고, 긴 문단은 문장 단위로 자른다.
+   *  돌려주는 조각마다 sep(뒤에 붙일 이음새)이 있어 번역을 같은 모양으로 이어 붙일 수 있다.
+   *  sep이 " "이면 한 문단을 문장으로 나눈 것이다. */
+  function splitForTranslation(text, max = CHUNK_SIZE) {
+    const source = String(text ?? "").trim();
+    if (!source) return [];
+    const parts = source.split(/(\n+)/); // [문단, 이음새, 문단, …]
+    const chunks = [];
+    let group = "";
+    let groupSep = "";
+    const flush = (sep) => {
+      if (group) chunks.push({ text: group, sep });
+      group = "";
+    };
+    for (let i = 0; i < parts.length; i += 2) {
+      const paragraph = parts[i].trim();
+      const sep = parts[i + 1] ? (parts[i + 1].length > 1 ? "\n\n" : "\n") : "";
+      if (!paragraph) continue;
+      if (paragraph.length > max) {
+        flush(groupSep);
+        const pieces = splitSentences(paragraph, max);
+        pieces.forEach((piece, index) => chunks.push({ text: piece, sep: index < pieces.length - 1 ? " " : sep }));
+        continue;
+      }
+      if (group && group.length + groupSep.length + paragraph.length > max) flush(groupSep);
+      group = group ? `${group}${groupSep}${paragraph}` : paragraph;
+      groupSep = sep;
+    }
+    flush("");
+    if (chunks.length) chunks[chunks.length - 1].sep = "";
+    return chunks;
+  }
+
+  /** 조각 번역을 이어 붙이고, 복사용 원문·번역 짝을 만든다(문장으로 나눈 조각은 다시 한 문단으로 합친다). */
+  function assemble(chunks, translations) {
+    let text = "";
+    const pairs = [];
+    let carry = null; // 문장 단위로 나눈 문단을 모으는 중
+    chunks.forEach((chunk, index) => {
+      const translated = String(translations[index] ?? "").trim();
+      text += translated + chunk.sep;
+      if (chunk.sep === " " || carry) {
+        carry = carry ? { source: `${carry.source} ${chunk.text}`, translation: `${carry.translation} ${translated}` } : { source: chunk.text, translation: translated };
+        if (chunk.sep !== " ") {
+          pairs.push(carry);
+          carry = null;
+        }
+        return;
+      }
+      pairs.push(...pairParagraphs(chunk.text, translated));
+    });
+    if (carry) pairs.push(carry);
+    return { text: text.trim(), pairs };
+  }
+
+  /* ── 용어집(6단계) ── */
+
+  /** 「원어 = 번역어」 줄을 읽는다. 빈 줄·# 주석·= 없는 줄은 건너뛴다. */
+  function parseGlossary(raw) {
+    const entries = [];
+    for (const line of String(raw ?? "").split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const at = trimmed.indexOf("=");
+      if (at <= 0) continue;
+      const source = trimmed.slice(0, at).trim();
+      const target = trimmed.slice(at + 1).replace(/^>/, "").trim();
+      if (source && target) entries.push({ source, target });
+    }
+    return entries;
+  }
+
+  /** 이 글에 나오는 용어만 지시문에 넣는다(짧은 지시문이 작은 모델에 낫다).
+   *  원어가 나오면 「원어 = 번역어」, 번역어 쪽이 나오면(반대 방향 번역) 「번역어 = 원어」로 넣는다. */
+  function glossaryLinesFor(entries, text, limit = 40) {
+    const haystack = String(text ?? "").toLowerCase();
+    const lines = [];
+    for (const { source, target } of entries || []) {
+      if (lines.length >= limit) break;
+      if (haystack.includes(source.toLowerCase())) lines.push(`${source} = ${target}`);
+      else if (haystack.includes(target.toLowerCase())) lines.push(`${target} = ${source}`);
+    }
+    return lines;
+  }
+
+  const api = {
+    joinBrokenLines,
+    paragraphs,
+    pairParagraphs,
+    COPY_FORMATS,
+    COPY_FORMAT_NAMES,
+    tsvCell,
+    formatCopy,
+    CHUNK_SIZE,
+    splitForTranslation,
+    assemble,
+    parseGlossary,
+    glossaryLinesFor,
+  };
   root.DT = Object.assign(root.DT || {}, { text: api });
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

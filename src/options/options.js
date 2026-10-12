@@ -28,6 +28,8 @@
     $("localModel").value = settings.localModel;
     $("localVisionModel").value = settings.localVisionModel;
     $("localTimeout").value = String(settings.localTimeout);
+    $("localParallel").value = String(settings.localParallel);
+    if (document.activeElement !== $("glossary")) $("glossary").value = settings.glossary;
     current = settings;
   }
 
@@ -78,6 +80,12 @@
   $("localModel").addEventListener("change", (event) => save({ localModel: event.target.value.trim() }));
   $("localVisionModel").addEventListener("change", (event) => save({ localVisionModel: event.target.value.trim() }));
   $("localTimeout").addEventListener("change", (event) => save({ localTimeout: Number(event.target.value) }));
+  $("localParallel").addEventListener("change", (event) => save({ localParallel: Number(event.target.value) }));
+  $("glossary").addEventListener("change", async (event) => {
+    await save({ glossary: event.target.value });
+    const count = DT.text.parseGlossary(event.target.value).length;
+    showStatus(`용어집을 저장했습니다(${count}개).`);
+  });
 
   function showLocalResult(text, kind) {
     $("localResult").textContent = text;

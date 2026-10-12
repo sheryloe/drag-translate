@@ -40,7 +40,7 @@ test("번역 전용 모델(TranslateGemma·맞춤 모델)은 지시문과 글을
   assert.equal(messages.length, 1);
   assert.equal(messages[0].role, "user");
   assert.match(messages[0].content, /^You are a professional Korean \(ko\) to English \(en\) translator\./);
-  assert.match(messages[0].content, /Always translate these terms exactly like this: 계측제어 = I&C\./);
+  assert.ok(messages[0].content.includes("\n- 계측제어 → I&C\n"));
   assert.ok(messages[0].content.endsWith("Please translate the following Korean text into English:\n\n\n계측제어 설비"));
   // 원문이 목표 언어와 같게 어림되면 흔한 쪽을 원문 언어로 둔다.
   assert.match(local.translateMessages("Hello", "en", [], "translategemma:4b")[0].content, /Korean \(ko\) to English/);

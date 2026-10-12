@@ -52,7 +52,8 @@ body {
 }
 
 #minLength,
-#localTimeout {
+#localTimeout,
+#localParallel {
   width: 72px;
   text-align: right;
 }
@@ -61,6 +62,18 @@ body {
 #localModel,
 #localVisionModel {
   width: 220px;
+}
+
+#glossary {
+  width: 100%;
+  font: inherit;
+  font-size: 13px;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 6px 8px;
+  resize: vertical;
 }
 
 .note {

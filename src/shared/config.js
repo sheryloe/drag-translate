@@ -34,6 +34,9 @@
   /** 한 번에 번역하는 최대 글자 수(파파고 웹·구글 모두 이 안에서 안정적이다). */
   const MAX_TEXT = 5000;
 
+  /** 용어집 최대 글자 수. */
+  const GLOSSARY_MAX = 20000;
+
   const DEFAULTS = Object.freeze({
     enabled: true, // 드래그 번역 켜기
     engine: "google", // google: 그 자리에서 번역 · papago: 파파고 웹사이트를 새 탭으로
@@ -49,6 +52,8 @@
     localModel: "translategemma:4b", // 번역에 쓸 모델 — 번역 전용 소형 모델(3.3GB)
     localVisionModel: "qwen3-vl:2b-instruct", // 그림 속 글자를 읽을 모델 — 소형 시각 모델(1.9GB). 비우면 번역 모델로 읽는다
     localTimeout: 120, // 내 PC 번역 서버의 답을 기다리는 시간(초)
+    localParallel: 1, // 긴 글을 나눠 번역할 때 한꺼번에 보내는 조각 수(Ollama 기본 설정은 1~4개를 함께 처리)
+    glossary: "", // 용어집 — 한 줄에 「원어 = 번역어」. 길어질 수 있어 동기화 저장소가 아니라 이 PC 저장소에 둔다
   });
 
   /** 사람이 적은 주소를 「http://이름:포트」 꼴로 다듬는다. 내 PC 주소가 아니면 null. */
@@ -96,23 +101,30 @@
     if (typeof value.localModel === "string" && value.localModel.trim() && value.localModel.trim().length <= 200) out.localModel = value.localModel.trim();
     if (typeof value.localVisionModel === "string" && value.localVisionModel.trim().length <= 200) out.localVisionModel = value.localVisionModel.trim();
     if (Number.isInteger(value.localTimeout) && value.localTimeout >= 10 && value.localTimeout <= 600) out.localTimeout = value.localTimeout;
+    if (Number.isInteger(value.localParallel) && value.localParallel >= 1 && value.localParallel <= 4) out.localParallel = value.localParallel;
+    if (typeof value.glossary === "string") out.glossary = value.glossary.slice(0, GLOSSARY_MAX);
     return out;
   }
 
   /** 저장소를 쓸 수 없는 곳(확장 밖에서 화면을 시험할 때 등)에서는 기본값으로 돈다. */
   const storage = () => (typeof chrome !== "undefined" && chrome.storage ? chrome.storage : null);
 
+  /** 설정은 동기화 저장소(sync, 항목당 8KB 제한)에, 용어집만 이 PC 저장소(local)에 둔다. */
   async function load() {
     const area = storage();
     if (!area) return normalize(undefined);
-    const stored = await area.sync.get("settings");
-    return normalize(stored.settings);
+    const [stored, kept] = await Promise.all([area.sync.get("settings"), area.local.get("glossary")]);
+    return normalize({ ...(stored.settings || {}), glossary: kept.glossary });
   }
 
   async function save(patch) {
     const next = normalize({ ...(await load()), ...patch });
     const area = storage();
-    if (area) await area.sync.set({ settings: next });
+    if (area) {
+      const { glossary, ...synced } = next;
+      await area.sync.set({ settings: synced });
+      if (patch && "glossary" in patch) await area.local.set({ glossary });
+    }
     return next;
   }
 
@@ -120,7 +132,7 @@
     const area = storage();
     if (!area) return;
     area.onChanged.addListener((changes, name) => {
-      if (name === "sync" && changes.settings) callback(normalize(changes.settings.newValue));
+      if ((name === "sync" && changes.settings) || (name === "local" && changes.glossary)) load().then(callback, () => {});
     });
   }
 

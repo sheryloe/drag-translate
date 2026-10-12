@@ -63,3 +63,11 @@ test("복사 방식 이름", () => {
   assert.deepEqual(tools.COPY_FORMATS, ["translation", "pair", "table"]);
   for (const format of tools.COPY_FORMATS) assert.ok(tools.COPY_FORMAT_NAMES[format]);
 });
+
+test("PDF 줄바꿈 — 짧은 제목 줄 뒤는 줄바꿈을 남긴다", () => {
+  const pdf = "1. Purpose\nThis procedure describes the configuration manage-\nment of safety related software used in the\ninstrumentation and control system.";
+  assert.equal(
+    tools.joinBrokenLines(pdf),
+    "1. Purpose\nThis procedure describes the configuration management of safety related software used in the instrumentation and control system.",
+  );
+});

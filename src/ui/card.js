@@ -48,6 +48,7 @@
     .body { padding: 10px 12px; overflow: auto; white-space: pre-wrap; word-break: break-word; user-select: text; }
     .body.loading { color: var(--muted); }
     .body.error { color: var(--danger); }
+    .partial:not(:empty) { margin-top: 10px; color: var(--fg); }
     .busy { height: 3px; margin-top: 8px; background: var(--soft); border-radius: 2px; overflow: hidden; }
     .busy i { display: block; width: 35%; height: 100%; background: var(--accent); border-radius: 2px; animation: dt-busy 1.2s ease-in-out infinite; }
     @keyframes dt-busy { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
@@ -185,6 +186,7 @@
       this.engine = settings.engine;
       this.lang = settings.targetLang;
       this.copyFormat = settings.copyFormat || DT.config.DEFAULTS.copyFormat;
+      this.parallel = settings.localParallel || 1;
       this.pairs = null;
       this.range = range || null;
       this.fallbackRect = event ? pointRect(event) : null;
@@ -302,15 +304,21 @@
     showProgress(label) {
       this.body.className = "body loading";
       this.progressText = el("span", { text: label });
-      this.body.replaceChildren(this.progressText, el("div", { class: "busy", "aria-hidden": "true" }, [el("i")]));
+      this.partial = el("div", { class: "partial" });
+      this.body.replaceChildren(this.progressText, el("div", { class: "busy", "aria-hidden": "true" }, [el("i")]), this.partial);
     }
 
+    /** 지난 시간을 1초마다 붙인다. label은 글 또는 글을 돌려주는 함수(진행 조각 수가 바뀌므로). */
     startTimer(token, label) {
       const started = Date.now();
+      const text = () => `${typeof label === "function" ? label() : label} ${Math.round((Date.now() - started) / 1000)}초`;
       clearInterval(this.timer);
+      this.tick = () => {
+        if (token === this.token && this.progressText) this.progressText.textContent = text();
+      };
       this.timer = setInterval(() => {
         if (token !== this.token || !this.progressText) return clearInterval(this.timer);
-        this.progressText.textContent = `${label} ${Math.round((Date.now() - started) / 1000)}초`;
+        this.tick();
       }, 1000);
     }
 
@@ -318,14 +326,11 @@
       const token = ++this.token;
       const engine = this.engine;
       this.result = "";
+      this.pairs = null;
       this.detectedLabel.textContent = engine === "local" ? "내 PC 번역 · 밖으로 보내지 않음" : "";
-      if (engine === "local") {
-        this.showProgress("내 PC에서 번역 중…");
-        this.startTimer(token, "내 PC에서 번역 중…");
-      } else {
-        this.body.className = "body loading";
-        this.body.textContent = "번역 중…";
-      }
+      if (engine === "local") return this.translateLocal(token);
+      this.body.className = "body loading";
+      this.body.textContent = "번역 중…";
       this.position();
       try {
         const reply = await DT.bridge.translate(this.text, this.lang, engine);
@@ -334,6 +339,51 @@
         this.body.className = "body";
         this.body.textContent = reply.text;
         if (reply.detected) this.detectedLabel.textContent = `원문: ${DT.config.languageName(reply.detected)}`;
+      } catch (error) {
+        if (token !== this.token) return;
+        this.showError(error);
+      }
+      this.position();
+    }
+
+    /** 내 PC 번역 — 긴 글은 문단·문장 조각으로 나눠 차례로(설정한 수만큼 함께) 보내고, 끝난 앞부분부터 보인다.
+     *  조각마다 짧게 묻는 편이 작은 모델에 빠르고 정확하며, 같은 조각은 서비스 워커가 기억해 다시 묻지 않는다. */
+    async translateLocal(token) {
+      const chunks = DT.text.splitForTranslation(this.text);
+      const total = chunks.length;
+      const results = new Array(total);
+      let done = 0;
+      let next = 0;
+      const label = () => (total > 1 ? `내 PC에서 번역 중… ${done}/${total} 조각` : "내 PC에서 번역 중…");
+      this.showProgress(label());
+      this.startTimer(token, label);
+      this.position();
+      const showPartial = () => {
+        let prefix = 0;
+        while (prefix < total && results[prefix] !== undefined) prefix += 1;
+        if (prefix) this.partial.textContent = DT.text.assemble(chunks.slice(0, prefix), results.slice(0, prefix)).text;
+      };
+      const worker = async () => {
+        while (next < total) {
+          const index = next++;
+          const reply = await DT.bridge.translate(chunks[index].text, this.lang, "local");
+          if (token !== this.token) return;
+          results[index] = reply.text;
+          done += 1;
+          this.tick();
+          showPartial();
+          this.position();
+        }
+      };
+      const parallel = Math.max(1, Math.min(4, this.parallel || 1, total));
+      try {
+        await Promise.all(Array.from({ length: parallel }, worker));
+        if (token !== this.token) return;
+        const { text, pairs } = DT.text.assemble(chunks, results);
+        this.result = text;
+        this.pairs = pairs;
+        this.body.className = "body";
+        this.body.textContent = text;
       } catch (error) {
         if (token !== this.token) return;
         this.showError(error);

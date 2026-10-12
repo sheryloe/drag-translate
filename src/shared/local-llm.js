@@ -133,13 +133,31 @@
     if (source === targetLang) source = targetLang === "en" ? "ko" : "en"; // 같은 언어로 어림되면 흔한 쪽으로
     const sourceName = LANGUAGE_EN[source] || source;
     const name = LANGUAGE_EN[targetLang] || targetLang;
-    const lines = [
-      `You are a professional ${sourceName} (${source}) to ${name} (${targetLang}) translator. Your goal is to accurately convey the meaning and nuances of the original text while following ${name} grammar and vocabulary.`,
-      `Produce only the ${name} translation, without any additional explanations or commentary.`,
-    ];
-    if (glossaryLines && glossaryLines.length) lines.push(`Always translate these terms exactly like this: ${glossaryLines.join("; ")}.`);
-    lines.push(`Please translate the following ${sourceName} text into ${name}:`);
-    return `${lines.join(" ")}\n\n\n${text}`;
+    let head =
+      `You are a professional ${sourceName} (${source}) to ${name} (${targetLang}) translator. Your goal is to accurately convey the meaning and nuances of the original text while following ${name} grammar and vocabulary. ` +
+      `Produce only the ${name} translation, without any additional explanations or commentary.`;
+    // 용어집은 한 줄에 하나씩 「원어 → 번역어」 목록으로 — 한 문장에 늘어놓을 때보다 잘 따랐다(실측: 0/3 → 2/3).
+    if (glossaryLines && glossaryLines.length) {
+      head += `\nTerminology (you must use the ${name} term on the right for the term on the left):\n${glossaryLines.map((line) => `- ${line.replace(" = ", " → ")}`).join("\n")}\n`;
+    } else {
+      head += " ";
+    }
+    return `${head}Please translate the following ${sourceName} text into ${name}:\n\n\n${text}`;
+  }
+
+  /** 모델이 용어집 번역어를 띄어쓰기만 달리 쓴 것(원자로보호계통 → 원자로 보호 계통)을 용어집대로 바로잡는다. */
+  function applyGlossarySpacing(output, glossaryLines) {
+    let text = String(output ?? "");
+    for (const line of glossaryLines || []) {
+      const at = line.indexOf(" = ");
+      if (at < 0) continue;
+      const target = line.slice(at + 3).trim();
+      const letters = [...target.replace(/\s+/g, "")];
+      if (letters.length < 2 || text.includes(target)) continue;
+      const pattern = new RegExp(letters.map((char) => char.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("\\s*"), "g");
+      text = text.replace(pattern, target);
+    }
+    return text;
   }
 
   /** 번역 요청 본문 만들기. 일반 모델은 시스템 지시문 + 글, 번역 전용 모델은 한 메시지. */
@@ -307,7 +325,7 @@
       if (again && !hasStrayHan(again, text, targetLang)) result = again;
     }
     if (!result) throw new Error("내 PC 번역 모델이 빈 답을 돌려주었습니다. 다른 모델을 골라 보세요.");
-    return { text: result, detected: null };
+    return { text: applyGlossarySpacing(result, glossaryLines), detected: null };
   }
 
   /** 한자가 섞였을 때 다시 묻는 요청 — 앞의 답을 보여 주고 목표 언어 글자로만 다시 옮기게 한다. */
@@ -514,6 +532,7 @@
     cleanOutput,
     hasStrayHan,
     guessLanguage,
+    applyGlossarySpacing,
     usesSingleMessage,
     translateMessages,
     explainStatus,

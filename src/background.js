@@ -1,8 +1,8 @@
 /* 서비스 워커 — 번역 요청을 보내고, 우클릭 메뉴와 「PDF를 번역 뷰어로 열기」 규칙을 관리한다.
  * 구글 번역과 내 PC 번역 서버 요청은 모두 여기서 보낸다(페이지의 보안 정책에 막히지 않게). */
-importScripts("shared/config.js", "shared/engines.js", "shared/local-llm.js", "shared/models.js", "shared/pdf-url.js");
+importScripts("shared/config.js", "shared/engines.js", "shared/text-tools.js", "shared/local-llm.js", "shared/models.js", "shared/pdf-url.js");
 
-const { config, engines, local, models, pdfUrl } = self.DT;
+const { config, engines, text: textTools, local, models, pdfUrl } = self.DT;
 
 const VIEWER_PAGE = chrome.runtime.getURL("src/pdf/viewer.html");
 const RESULT_PAGE = chrome.runtime.getURL("src/result/result.html");
@@ -38,8 +38,10 @@ async function translate(text, targetLang, engine) {
     // 내 PC 번역 — 설정의 서버(내 PC 주소만)로 보낸다. 모델이 바뀌면 다시 번역한다.
     const settings = await config.load();
     const opts = local.optionsFrom(settings);
-    const key = ["local", opts.mode, opts.server, opts.model, target, clean].join("\u0000");
-    return remember(key, () => local.translateLocal(clean, target, opts));
+    // 용어집 — 이 글에 나오는 용어만 지시문에 넣는다. 용어집이 바뀌면 다시 번역한다.
+    const glossary = textTools.glossaryLinesFor(textTools.parseGlossary(settings.glossary), clean);
+    const key = ["local", opts.mode, opts.server, opts.model, target, glossary.join("\n"), clean].join("\u0000");
+    return remember(key, () => local.translateLocal(clean, target, opts, undefined, glossary));
   }
   return remember(["google", target, clean].join("\u0000"), () => engines.translateGoogle(clean, target));
 }

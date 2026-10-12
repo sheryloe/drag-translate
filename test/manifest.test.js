@@ -25,13 +25,14 @@ test("매니페스트가 가리키는 파일이 모두 있다", () => {
   for (const file of files) assert.ok(exists(file), file);
 });
 
-test("콘텐츠 스크립트는 설정 → 엔진 → 글 다듬기 → 연결 → 번역 창 → 시작 순서로 싣는다", () => {
+test("콘텐츠 스크립트는 설정 → 엔진 → 글 다듬기 → 연결 → 번역 창 → 영역 고르기 → 시작 순서로 싣는다", () => {
   assert.deepEqual(manifest.content_scripts[0].js, [
     "src/shared/config.js",
     "src/shared/engines.js",
     "src/shared/text-tools.js",
     "src/shared/bridge.js",
     "src/ui/card.js",
+    "src/ui/region.js",
     "src/content/content.js",
   ]);
 });

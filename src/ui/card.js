@@ -60,6 +60,7 @@
       font: inherit; font-weight: 600; border: 0; border-radius: 7px; padding: 8px 12px; width: 100%;
       background: var(--accent); color: var(--accent-fg); cursor: pointer;
     }
+    .title { font-size: 13px; font-weight: 600; margin-right: auto; }
     .hint { color: var(--muted); font-size: 12px; margin-top: 8px; white-space: normal; }
     .foot { display: flex; align-items: center; gap: 8px; padding: 6px 12px 8px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
     .foot a { margin-left: auto; color: var(--accent); text-decoration: none; cursor: pointer; white-space: nowrap; }
@@ -191,6 +192,30 @@
       this.card.hidden = false;
       this.position();
       if (this.translatesInPlace) this.translate();
+    }
+
+    /** 알림만 보이는 창 — 그림 속 글자를 읽는 중처럼 번역할 글이 아직 없을 때. kind: busy | error */
+    notice(message, point, kind) {
+      this.ensure();
+      this.fab.hidden = true;
+      this.token += 1;
+      clearInterval(this.timer);
+      this.range = null;
+      this.result = "";
+      if (point) this.fallbackRect = pointRect(point);
+      const close = el("button", { class: "icon-btn", type: "button", title: "닫기 (Esc)", "aria-label": "닫기", text: "✕" });
+      close.addEventListener("click", () => (this.inline ? window.close() : this.hide()));
+      this.body = el("div", { class: "body" });
+      this.card.replaceChildren(el("div", { class: "head" }, [el("span", { class: "title", text: "화면 영역 번역 · 내 PC" }), close]), this.body);
+      if (kind === "busy") {
+        this.showProgress(message);
+        this.startTimer(this.token, message);
+      } else {
+        this.body.className = kind === "error" ? "body error" : "body";
+        this.body.textContent = message;
+      }
+      this.card.hidden = false;
+      this.position();
     }
 
     /** 그 자리에서 번역하는 엔진인가(구글·내 PC). 파파고는 새 탭으로 연다. */
@@ -437,6 +462,13 @@
         const selection = document.getSelection();
         const range = selection && selection.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
         card.open(text, { ...settings, engine: engine || settings.engine }, range);
+      },
+      /** 정해 준 자리(화면 좌표)에 띄운다 — 화면 영역 번역. */
+      openAt(text, engine, point) {
+        card.open(text, { ...settings, engine: engine || settings.engine }, null, point);
+      },
+      notice(message, point, kind) {
+        card.notice(message, point, kind);
       },
     };
   }

@@ -18,6 +18,9 @@
     translate: (text, targetLang, engine) => call({ type: "translate", text, targetLang, engine }),
     testLocal: (opts) => call({ type: "local-test", opts }),
     listLocalModels: () => call({ type: "local-models" }),
+    captureRegion: (rect, viewportWidth) => call({ type: "capture-region", rect, viewportWidth }),
+    ocrImage: (image, mime) => call({ type: "ocr-image", image, mime }),
+    startRegion: (tabId) => call({ type: "start-region", tabId }),
     createLocalModel: (name) => call({ type: "local-create", name }),
     openTab: (url) => call({ type: "open-tab", url }),
   };

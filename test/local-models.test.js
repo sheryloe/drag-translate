@@ -128,3 +128,17 @@ test("번역 전용 모델은 시각 기능이 있어도 그림 읽기에 쓰지
   await assert.rejects(local.recognizeImage("QUJD", { ...OLLAMA, model: "translategemma:4b" }, fetchImpl), /번역 전용 모델 「translategemma:4b」은\(는\) 그림 속 글자를 옮겨 적지 못합니다/);
   assert.equal(fetchImpl.calls.length, 0);
 });
+
+test("그림 자르기 상자 — 화면 배율을 곱하고 그림 밖은 잘라 낸다", () => {
+  assert.deepEqual(local.cropBox({ x: 10, y: 20, width: 100, height: 50 }, 1.5, 2000, 1000), { x: 15, y: 30, width: 150, height: 75 });
+  assert.deepEqual(local.cropBox({ x: -10, y: 900, width: 100, height: 300 }, 1, 800, 1000), { x: 0, y: 900, width: 90, height: 100 });
+  assert.equal(local.cropBox({ x: 10, y: 10, width: 2, height: 50 }, 1, 800, 600), null);
+  assert.equal(local.cropBox({ x: 900, y: 10, width: 50, height: 50 }, 1, 800, 600), null, "그림 밖");
+});
+
+test("모델에 보낼 그림 크기 — 큰 것은 줄이고 작은 것은 두 배까지 키운다", () => {
+  assert.deepEqual(local.fitSize(3200, 1600), { width: 1600, height: 800 });
+  assert.deepEqual(local.fitSize(1000, 500), { width: 1000, height: 500 });
+  assert.deepEqual(local.fitSize(200, 40), { width: 400, height: 80 });
+  assert.deepEqual(local.fitSize(400, 40), { width: 512, height: 51 });
+});

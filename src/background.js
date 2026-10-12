@@ -81,6 +81,7 @@ async function setupMenus() {
   chrome.contextMenus.create({ id: "dt-google", title: "구글로 번역: “%s”", contexts: ["selection"] });
   chrome.contextMenus.create({ id: "dt-papago", title: "파파고에서 번역: “%s”", contexts: ["selection"] });
   chrome.contextMenus.create({ id: "dt-local", title: "내 PC로 번역: “%s”", contexts: ["selection"] });
+  chrome.contextMenus.create({ id: "dt-region", title: "화면 영역 골라 번역(내 PC)", contexts: ["page", "image"] });
   chrome.contextMenus.create({ id: "dt-pdf-link", title: "이 PDF를 번역 뷰어로 열기", contexts: ["link"], targetUrlPatterns: PDF_LINK_PATTERNS });
   chrome.contextMenus.create({
     id: "dt-pdf-page",
@@ -88,6 +89,45 @@ async function setupMenus() {
     contexts: ["page"],
     documentUrlPatterns: [...PDF_LINK_PATTERNS, "file:///*.pdf", "file:///*.PDF"],
   });
+}
+
+/* ── 화면 영역 번역 ─────────────────────────────────── */
+
+/** 그림 바이트 → base64(큰 그림도 호출 스택이 넘치지 않게 나눠 바꾼다). */
+function toBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(binary);
+}
+
+/** 찍은 화면에서 고른 영역만 잘라 PNG(base64)로. 그림 픽셀/CSS 픽셀 비율은 찍은 폭 ÷ 창 폭으로 잰다(화면 배율·확대 모두 반영). */
+async function cropCapture(dataUrl, rect, viewportWidth) {
+  const bitmap = await createImageBitmap(await (await fetch(dataUrl)).blob());
+  const scale = viewportWidth > 0 ? bitmap.width / viewportWidth : 1;
+  const box = local.cropBox(rect || {}, scale, bitmap.width, bitmap.height);
+  if (!box) throw new Error("고른 영역이 너무 작습니다.");
+  const size = local.fitSize(box.width, box.height);
+  const canvas = new OffscreenCanvas(size.width, size.height);
+  const context = canvas.getContext("2d");
+  context.imageSmoothingQuality = "high";
+  context.drawImage(bitmap, box.x, box.y, box.width, box.height, 0, 0, size.width, size.height);
+  bitmap.close();
+  return toBase64(await (await canvas.convertToBlob({ type: "image/png" })).arrayBuffer());
+}
+
+/** 그 탭에서 영역 고르기를 시작한다 — 웹 페이지는 콘텐츠 스크립트, PDF 번역 뷰어는 뷰어 스스로. */
+async function startRegion(tab) {
+  if (!tab || tab.id === undefined) throw new Error("탭을 찾지 못했습니다.");
+  if (typeof tab.url === "string" && tab.url.startsWith(VIEWER_PAGE)) {
+    await chrome.runtime.sendMessage({ type: "viewer-pick-region", tabId: tab.id });
+    return;
+  }
+  try {
+    await chrome.tabs.sendMessage(tab.id, { type: "pick-region" }, { frameId: 0 });
+  } catch {
+    throw new Error("이 화면에서는 영역 번역을 쓸 수 없습니다(크롬 내부 화면·웹 스토어·크롬 기본 PDF 뷰어). 설치 전부터 열려 있던 탭이면 새로 고쳐 주세요.");
+  }
 }
 
 /** 결과 창 — 엔진은 주소의 ?engine=, 글은 # 뒤에 담는다. */
@@ -111,6 +151,13 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       }
       return;
     }
+    case "dt-region":
+      try {
+        await startRegion(tab);
+      } catch {
+        // 콘텐츠 스크립트가 없는 화면 — 우클릭 메뉴에는 알릴 자리가 없어 조용히 넘어간다(팝업 단추는 이유를 보인다).
+      }
+      return;
     case "dt-papago":
       await chrome.tabs.create({ url: engines.papagoWebUrl(text, settings.targetLang), index: tab ? tab.index + 1 : undefined });
       return;
@@ -134,6 +181,25 @@ async function handle(message, sender) {
       const settings = await config.load();
       const opts = { ...local.optionsFrom(settings), ...(message.opts || {}) };
       return { ok: true, ...(await local.testConnection(opts, settings.targetLang)) };
+    }
+    case "capture-region": {
+      // 보이는 탭을 찍어 고른 영역만 잘라 돌려준다. 찍은 그림은 어디에도 저장하지 않는다.
+      if (!sender.tab || sender.tab.windowId === undefined) throw new Error("탭을 찾지 못했습니다.");
+      const dataUrl = await chrome.tabs.captureVisibleTab(sender.tab.windowId, { format: "png" });
+      return { ok: true, image: await cropCapture(dataUrl, message.rect, Number(message.viewportWidth)), mime: "image/png" };
+    }
+    case "ocr-image": {
+      // 그림 속 글자 읽기는 엔진 설정과 상관없이 늘 내 PC 모델로만 한다.
+      const image = String(message.image || "");
+      if (!image || image.length > 20_000_000 || !/^[A-Za-z0-9+/=]+$/.test(image.slice(0, 1000))) throw new Error("그림을 받지 못했습니다.");
+      const mime = /^image\/(png|jpeg|webp)$/.test(message.mime) ? message.mime : "image/png";
+      const settings = await config.load();
+      return { ok: true, text: await local.recognizeImage(image, local.optionsFrom(settings), undefined, mime) };
+    }
+    case "start-region": {
+      if (!fromExtensionPage(sender)) throw new Error("팝업에서만 할 수 있습니다.");
+      await startRegion(await chrome.tabs.get(Number(message.tabId)));
+      return { ok: true };
     }
     case "local-models": {
       const settings = await config.load();

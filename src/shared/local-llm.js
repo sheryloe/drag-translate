@@ -322,6 +322,27 @@
 
   /* ── 그림 속 글자 읽기(OCR) ── */
 
+  /** 화면에서 고른 영역(CSS 픽셀) → 찍은 그림 안의 픽셀 상자. scale은 그림 픽셀 / CSS 픽셀.
+   *  그림 밖으로 나간 부분은 잘라 내고, 남는 것이 너무 작으면 null. */
+  function cropBox(rect, scale, imageWidth, imageHeight) {
+    const s = scale > 0 ? scale : 1;
+    const x1 = Math.max(0, Math.floor(rect.x * s));
+    const y1 = Math.max(0, Math.floor(rect.y * s));
+    const x2 = Math.min(imageWidth, Math.ceil((rect.x + rect.width) * s));
+    const y2 = Math.min(imageHeight, Math.ceil((rect.y + rect.height) * s));
+    if (x2 - x1 < 4 || y2 - y1 < 4) return null;
+    return { x: x1, y: y1, width: x2 - x1, height: y2 - y1 };
+  }
+
+  /** 모델에 보낼 그림 크기 — 너무 크면 줄여 토큰을 아끼고, 너무 작으면(한두 줄) 두 배까지 키워 글자를 또렷하게 한다. */
+  function fitSize(width, height, maxSide = 1600, minSide = 512) {
+    const longest = Math.max(width, height);
+    let scale = 1;
+    if (longest > maxSide) scale = maxSide / longest;
+    else if (longest < minSide) scale = Math.min(2, minSide / longest);
+    return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) };
+  }
+
   /** 그림 읽기 지시 — 번역은 하지 않고 글자만 그대로 옮겨 적게 한다(번역은 글 번역 과정이 맡는다). */
   const OCR_PROMPT =
     "Transcribe all text in this image exactly as written, in reading order, keeping line breaks. Do not translate, summarize, describe, or add anything. If there is no text, output nothing.";
@@ -503,6 +524,8 @@
     hasModel,
     testConnection,
     OCR_PROMPT,
+    cropBox,
+    fitSize,
     recognizeRequest,
     recognizeImage,
     capabilities,

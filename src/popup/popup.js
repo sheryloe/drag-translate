@@ -49,6 +49,16 @@
   });
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  $("region").addEventListener("click", async () => {
+    $("regionResult").textContent = "";
+    try {
+      if (!tab) throw new Error("탭을 찾지 못했습니다.");
+      await DT.bridge.startRegion(tab.id);
+      window.close();
+    } catch (error) {
+      $("regionResult").textContent = error && error.message ? error.message : String(error);
+    }
+  });
   if (tab && DT.pdfUrl.isPdfUrl(tab.url)) {
     $("openThisPdf").hidden = false;
     $("openThisPdf").addEventListener("click", async () => {

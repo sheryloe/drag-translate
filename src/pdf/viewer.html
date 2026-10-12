@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PDF 번역 뷰어</title>
+    <link rel="stylesheet" href="../../vendor/pdfjs/web/pdf_viewer.css" />
+    <link rel="stylesheet" href="viewer.css" />
+    <script src="../shared/config.js"></script>
+    <script src="../shared/engines.js"></script>
+    <script src="../shared/pdf-url.js"></script>
+    <script src="../shared/bridge.js"></script>
+    <script src="../ui/card.js"></script>
+    <script type="module" src="viewer.js"></script>
+  </head>
+  <body>
+    <header class="bar">
+      <button id="openFile" type="button" title="내 컴퓨터의 PDF 파일 열기">파일 열기</button>
+      <input id="fileInput" type="file" accept="application/pdf,.pdf" hidden />
+      <span id="title" class="title">PDF 번역 뷰어</span>
+      <div class="group" role="group" aria-label="쪽 이동">
+        <button id="prev" type="button" title="이전 쪽" aria-label="이전 쪽">◀</button>
+        <input id="pageNumber" type="number" min="1" value="1" aria-label="쪽 번호" />
+        <span id="pageCount" class="muted">/ 0</span>
+        <button id="next" type="button" title="다음 쪽" aria-label="다음 쪽">▶</button>
+      </div>
+      <div class="group" role="group" aria-label="확대·축소">
+        <button id="zoomOut" type="button" title="축소" aria-label="축소">−</button>
+        <select id="scale" aria-label="배율">
+          <option value="page-width" selected>폭 맞춤</option>
+          <option value="page-fit">쪽 맞춤</option>
+          <option value="auto">자동</option>
+          <option value="0.75">75%</option>
+          <option value="1">100%</option>
+          <option value="1.25">125%</option>
+          <option value="1.5">150%</option>
+          <option value="2">200%</option>
+          <option value="custom" hidden></option>
+        </select>
+        <button id="zoomIn" type="button" title="확대" aria-label="확대">+</button>
+      </div>
+      <span class="spacer"></span>
+      <button id="native" type="button" title="크롬 기본 PDF 뷰어로 다시 열기" hidden>원래 뷰어로 보기</button>
+      <button id="settings" type="button" title="드래그 번역 설정">설정</button>
+    </header>
+
+    <div id="message" class="message" role="status" hidden>
+      <p id="messageText"></p>
+      <div id="messageActions" class="actions"></div>
+    </div>
+
+    <div id="viewerContainer" tabindex="0">
+      <div id="viewer" class="pdfViewer"></div>
+    </div>
+
+    <div id="drop" class="drop" hidden>여기에 PDF 파일을 놓으세요</div>
+  </body>
+</html>

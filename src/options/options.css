@@ -1,0 +1,64 @@
+body {
+  background: var(--soft);
+}
+
+.wrap {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 28px 16px 40px;
+  display: grid;
+  gap: 16px;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.head p {
+  margin: 4px 0 0;
+}
+
+.card {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px 18px;
+}
+
+.welcome {
+  border-color: var(--accent);
+}
+
+.welcome ol {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.field .label {
+  max-width: 420px;
+}
+
+.field.column {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+#minLength {
+  width: 72px;
+  text-align: right;
+}
+
+@media (max-width: 560px) {
+  .field {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

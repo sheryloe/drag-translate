@@ -1,0 +1,166 @@
+:root {
+  --bar: #262b33;
+  --bar-fg: #f2f4f8;
+  --bar-muted: #aab2c0;
+  --bar-line: #3a414d;
+  --page-bg: #5a5f66;
+  --accent: #6c9cff;
+  color-scheme: dark;
+}
+
+/* class가 정한 display가 hidden 속성을 이기지 않게 한다(드롭 안내가 처음부터 덮던 결함). */
+[hidden] {
+  display: none !important;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--page-bg);
+  font-family: Pretendard, "Malgun Gothic", "Apple SD Gothic Neo", system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+}
+
+.bar {
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: 46px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  background: var(--bar);
+  color: var(--bar-fg);
+  border-bottom: 1px solid var(--bar-line);
+  z-index: 10;
+}
+
+.bar button,
+.bar select,
+.bar input {
+  font: inherit;
+  color: var(--bar-fg);
+  background: #323946;
+  border: 1px solid var(--bar-line);
+  border-radius: 6px;
+  padding: 4px 9px;
+}
+
+.bar button {
+  cursor: pointer;
+}
+
+.bar button:hover:not(:disabled) {
+  background: #3d4555;
+}
+
+.bar button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.bar button:focus-visible,
+.bar select:focus-visible,
+.bar input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.title {
+  max-width: 34vw;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 600;
+}
+
+.group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+#pageNumber {
+  width: 56px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.muted {
+  color: var(--bar-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.spacer {
+  flex: 1;
+}
+
+#viewerContainer {
+  position: absolute;
+  inset: 46px 0 0 0;
+  overflow: auto;
+  outline: none;
+}
+
+.message {
+  position: fixed;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(560px, calc(100vw - 32px));
+  background: #ffffff;
+  color: #1d2433;
+  border-radius: 10px;
+  padding: 16px 18px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+  z-index: 20;
+  line-height: 1.6;
+}
+
+.message p {
+  margin: 0 0 12px;
+  white-space: pre-line;
+}
+
+.message .actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.message button {
+  font: inherit;
+  border: 1px solid #c9d1de;
+  background: #f3f5f9;
+  color: #1d2433;
+  border-radius: 7px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.message button.primary {
+  background: #2f6feb;
+  border-color: #2f6feb;
+  color: #ffffff;
+}
+
+.drop {
+  position: fixed;
+  inset: 46px 0 0 0;
+  display: grid;
+  place-items: center;
+  background: rgba(47, 111, 235, 0.25);
+  border: 3px dashed #ffffff;
+  color: #ffffff;
+  font-size: 20px;
+  font-weight: 700;
+  z-index: 30;
+  pointer-events: none;
+}
+
+@media (max-width: 720px) {
+  .title {
+    display: none;
+  }
+}

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <title>드래그 번역</title>
+    <link rel="stylesheet" href="../ui/page.css" />
+    <link rel="stylesheet" href="popup.css" />
+    <script src="../shared/config.js"></script>
+    <script src="../shared/pdf-url.js"></script>
+    <script src="popup.js" defer></script>
+  </head>
+  <body>
+    <header class="top">
+      <img src="../../icons/icon32.png" alt="" width="20" height="20" />
+      <h1>드래그 번역</h1>
+      <label class="switch" title="드래그 번역 켜기·끄기">
+        <input id="enabled" type="checkbox" aria-label="드래그 번역 켜기" />
+        <span></span>
+      </label>
+    </header>
+
+    <section class="panel">
+      <div class="field">
+        <span class="label">번역 엔진</span>
+        <div class="segmented" role="radiogroup" aria-label="번역 엔진">
+          <label><input type="radio" name="engine" value="google" /><span>구글 바로</span></label>
+          <label><input type="radio" name="engine" value="papago" /><span>파파고 새 탭</span></label>
+        </div>
+      </div>
+      <div class="field">
+        <label class="label" for="targetLang">번역할 언어</label>
+        <select id="targetLang"></select>
+      </div>
+    </section>
+
+    <section class="panel pdf">
+      <button id="openThisPdf" class="btn primary" type="button" hidden>이 PDF를 번역 뷰어로 열기</button>
+      <button id="openPdfFile" class="btn" type="button">PDF 파일 열기</button>
+    </section>
+
+    <footer class="bottom">
+      <span id="state" class="muted"></span>
+      <a id="options" href="#">설정 더 보기</a>
+    </footer>
+  </body>
+</html>

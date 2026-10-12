@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>드래그 번역 설정</title>
+    <link rel="stylesheet" href="../ui/page.css" />
+    <link rel="stylesheet" href="options.css" />
+    <script src="../shared/config.js"></script>
+    <script src="options.js" defer></script>
+  </head>
+  <body>
+    <main class="wrap">
+      <header class="head">
+        <img src="../../icons/icon48.png" alt="" width="40" height="40" />
+        <div>
+          <h1>드래그 번역 설정</h1>
+          <p class="muted">웹 페이지와 PDF에서 글자를 드래그하면 그 자리에서 번역합니다.</p>
+        </div>
+      </header>
+
+      <section id="welcome" class="card welcome" hidden>
+        <h2>설치가 끝났습니다</h2>
+        <ol>
+          <li>아무 웹 페이지에서 글자를 드래그해 보세요. 선택 옆에 번역 창이 뜹니다.</li>
+          <li>PDF 주소를 열면 번역 뷰어로 열립니다. 쪽 안의 글자를 드래그하면 같은 방법으로 번역합니다.</li>
+          <li>내 컴퓨터의 PDF도 쓰려면 아래 「내 컴퓨터의 PDF」 안내를 따라 권한을 켜 주세요.</li>
+        </ol>
+      </section>
+
+      <section class="card">
+        <h2>번역</h2>
+        <div class="field">
+          <span class="label">드래그 번역 켜기</span>
+          <label class="switch"><input id="enabled" type="checkbox" aria-label="드래그 번역 켜기" /><span></span></label>
+        </div>
+        <div class="field">
+          <span class="label">번역 엔진<span class="help">구글은 선택 옆에 바로 보이고, 파파고는 번역 창의 단추로 파파고 사이트를 새 탭에 엽니다.</span></span>
+          <div class="segmented" role="radiogroup" aria-label="번역 엔진">
+            <label><input type="radio" name="engine" value="google" /><span>구글 바로</span></label>
+            <label><input type="radio" name="engine" value="papago" /><span>파파고 새 탭</span></label>
+          </div>
+        </div>
+        <div class="field">
+          <label class="label" for="targetLang">번역할 언어<span class="help">원문 언어는 자동으로 알아냅니다.</span></label>
+          <select id="targetLang"></select>
+        </div>
+        <div class="field">
+          <span class="label">번역 띄우는 때<span class="help">「아이콘」을 고르면 드래그 끝에 작은 「번」 단추가 뜨고, 눌러야 번역합니다.</span></span>
+          <div class="segmented" role="radiogroup" aria-label="번역 띄우는 때">
+            <label><input type="radio" name="trigger" value="instant" /><span>드래그 즉시</span></label>
+            <label><input type="radio" name="trigger" value="icon" /><span>아이콘 눌러서</span></label>
+          </div>
+        </div>
+        <div class="field">
+          <label class="label" for="minLength">최소 글자 수<span class="help">이보다 짧게 고른 글은 번역하지 않습니다.</span></label>
+          <input id="minLength" type="number" min="1" max="50" step="1" />
+        </div>
+        <div class="field">
+          <span class="label">입력칸 안의 선택은 무시<span class="help">글을 쓰는 중에 번역 창이 뜨지 않게 합니다.</span></span>
+          <label class="switch"><input id="ignoreEditable" type="checkbox" aria-label="입력칸 안의 선택은 무시" /><span></span></label>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>PDF</h2>
+        <div class="field">
+          <span class="label">PDF를 번역 뷰어로 열기<span class="help">주소가 .pdf로 끝나는 문서를 열면 크롬 기본 뷰어 대신 번역 뷰어로 엽니다. 끄면 크롬 기본 뷰어에서 글자를 고른 뒤 우클릭 「구글로 번역」을 쓰세요.</span></span>
+          <label class="switch"><input id="pdfAutoOpen" type="checkbox" aria-label="PDF를 번역 뷰어로 열기" /><span></span></label>
+        </div>
+        <div class="field column">
+          <span class="label">내 컴퓨터의 PDF<span class="help" id="fileAccess"></span></span>
+          <div class="row">
+            <button id="manage" class="btn" type="button">확장 프로그램 관리 열기</button>
+            <button id="openViewer" class="btn" type="button">PDF 파일 열기</button>
+          </div>
+        </div>
+      </section>
+
+      <p id="status" class="status" role="status"></p>
+    </main>
+  </body>
+</html>

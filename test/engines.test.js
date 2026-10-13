@@ -42,6 +42,31 @@ test("파파고·구글 웹 주소는 언어와 글을 미리 채운다", () => 
 });
 
 test("긴 글은 앞부분만 남기고 잘렸다고 알린다", () => {
-  assert.deepEqual(engines.clip("  abc  ", 5), { text: "abc", clipped: false });
-  assert.deepEqual(engines.clip("abcdefgh", 5), { text: "abcde", clipped: true });
+  assert.deepEqual(engines.clip("  abc  ", 5), { text: "abc", clipped: false, omitted: 0 });
+  assert.deepEqual(engines.clip("abcdefgh", 5), { text: "abcde", clipped: true, omitted: 3 });
+});
+
+test("자를 때 끝 1할 안에 문단·문장 끝이 있으면 거기서 자르고, 남은 글자 수를 센다", () => {
+  const sentence = "A".repeat(95) + ". "; // 97자
+  const long = sentence.repeat(400).trim(); // 38,800자 남짓
+  const { text, clipped, omitted } = engines.clip(long, 30000);
+  assert.equal(clipped, true);
+  assert.ok(text.length <= 30000 && text.length >= 27000, String(text.length));
+  assert.ok(text.endsWith("."), "문장 끝에서 자른다");
+  assert.equal(text.length + omitted + 1, long.length, "자른 자리의 빈칸 하나를 빼면 앞뒤가 원래 길이");
+  // 문장 끝이 없으면 max에서 자른다.
+  assert.equal(engines.clip("가".repeat(40000), 30000).text.length, 30000);
+  assert.equal(engines.clip("가".repeat(40000), 30000).omitted, 10000);
+});
+
+test("잘렸다는 알림은 번역한 양과 남은 양을 함께 보인다", () => {
+  assert.equal(engines.clipNote(30000, 12345), "글이 길어 앞 30,000자만 번역합니다. 남은 12,345자는 번역하지 않았습니다 — 그 부분을 따로 드래그해 주세요.");
+});
+
+test("파파고·구글 웹사이트 주소에는 사이트가 받는 앞 5,000자만 싣는다", () => {
+  const long = "가".repeat(12000);
+  const st = new URL(engines.papagoWebUrl(long, "en")).searchParams.get("st");
+  assert.equal(st.length, engines.WEB_MAX);
+  const text = new URL(engines.googleWebUrl(long, "en")).searchParams.get("text");
+  assert.equal(text.length, engines.WEB_MAX);
 });

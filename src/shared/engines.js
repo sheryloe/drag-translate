@@ -5,11 +5,29 @@
 
   const GOOGLE_ENDPOINT = "https://translate.googleapis.com/translate_a/single";
 
-  /** 너무 긴 선택은 앞부분만 쓴다. clipped가 true면 화면에 알린다. */
+  /** 파파고·구글 번역 웹사이트가 한 번에 받는 글자 수 — 새 탭 주소에는 이만큼만 싣는다. */
+  const WEB_MAX = 5000;
+
+  /** 너무 긴 선택은 앞부분만 쓴다. clipped가 true면 화면에 알리고, omitted(번역하지 않은 글자 수)를 함께 보인다.
+   *  끝 1할 안에 문단·문장 끝이 있으면 거기서 잘라 문장이 중간에 끊기지 않게 한다. */
   function clip(text, max) {
     const clean = String(text ?? "").replace(/\s+\n/g, "\n").trim();
-    if (clean.length <= max) return { text: clean, clipped: false };
-    return { text: clean.slice(0, max), clipped: true };
+    if (clean.length <= max) return { text: clean, clipped: false, omitted: 0 };
+    const head = clean.slice(0, max);
+    const floor = Math.floor(max * 0.9);
+    let cut = head.lastIndexOf("\n");
+    if (cut < floor) {
+      const sentence = /[.!?。！？…](?=\s)[^.!?。！？…]*$/.exec(head);
+      cut = sentence ? sentence.index + 1 : -1;
+    }
+    if (cut < floor) cut = max;
+    return { text: clean.slice(0, cut).trim(), clipped: true, omitted: clean.slice(cut).trim().length };
+  }
+
+  /** 잘렸을 때 화면에 보일 말. */
+  function clipNote(kept, omitted) {
+    const n = (value) => Number(value || 0).toLocaleString("ko-KR");
+    return `글이 길어 앞 ${n(kept)}자만 번역합니다. 남은 ${n(omitted)}자는 번역하지 않았습니다 — 그 부분을 따로 드래그해 주세요.`;
   }
 
   /** 구글 번역 요청 — 긴 글도 주소 길이에 걸리지 않게 본문(POST)으로 보낸다. */
@@ -49,17 +67,20 @@
     return parseGoogle(await response.json());
   }
 
+  /** 웹사이트에 실을 글 — 사이트가 받는 만큼(앞 5,000자)만. */
+  const webText = (text) => String(text ?? "").slice(0, WEB_MAX);
+
   /** 파파고 웹사이트 주소 — sk(원문 언어)·tk(번역 언어)·st(글)를 미리 채워 연다. */
   function papagoWebUrl(text, target, source = "auto") {
-    return `https://papago.naver.com/?sk=${encodeURIComponent(source)}&tk=${encodeURIComponent(target)}&st=${encodeURIComponent(text)}`;
+    return `https://papago.naver.com/?sk=${encodeURIComponent(source)}&tk=${encodeURIComponent(target)}&st=${encodeURIComponent(webText(text))}`;
   }
 
   /** 구글 번역 웹사이트 주소 — 결과를 더 자세히 보고 싶을 때. */
   function googleWebUrl(text, target, source = "auto") {
-    return `https://translate.google.com/?sl=${encodeURIComponent(source)}&tl=${encodeURIComponent(target)}&text=${encodeURIComponent(text)}&op=translate`;
+    return `https://translate.google.com/?sl=${encodeURIComponent(source)}&tl=${encodeURIComponent(target)}&text=${encodeURIComponent(webText(text))}&op=translate`;
   }
 
-  const api = { GOOGLE_ENDPOINT, clip, googleRequest, parseGoogle, translateGoogle, papagoWebUrl, googleWebUrl };
+  const api = { GOOGLE_ENDPOINT, WEB_MAX, clip, clipNote, googleRequest, parseGoogle, translateGoogle, papagoWebUrl, googleWebUrl };
   root.DT = Object.assign(root.DT || {}, { engines: api });
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

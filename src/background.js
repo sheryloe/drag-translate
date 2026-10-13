@@ -1,8 +1,8 @@
 /* 서비스 워커 — 번역 요청을 보내고, 우클릭 메뉴와 「PDF를 번역 뷰어로 열기」 규칙을 관리한다.
  * 구글 번역과 내 PC 번역 서버 요청은 모두 여기서 보낸다(페이지의 보안 정책에 막히지 않게). */
-importScripts("shared/config.js", "shared/engines.js", "shared/text-tools.js", "shared/local-llm.js", "shared/models.js", "shared/pdf-url.js");
+importScripts("shared/config.js", "shared/engines.js", "shared/text-tools.js", "shared/local-llm.js", "shared/models.js", "shared/pdf-url.js", "shared/page-limits.js");
 
-const { config, engines, text: textTools, local, models, pdfUrl } = self.DT;
+const { config, engines, text: textTools, local, models, pdfUrl, pageLimits } = self.DT;
 
 const VIEWER_PAGE = chrome.runtime.getURL("src/pdf/viewer.html");
 const RESULT_PAGE = chrome.runtime.getURL("src/result/result.html");
@@ -75,23 +75,87 @@ async function translate(text, targetLang, engine) {
 
 /* ── PDF 자동 열기 규칙 ─────────────────────────────── */
 
+/** 응답 머리(Content-Type) 규칙이 걸렸는가 — 크롬 128 미만은 그 조건을 몰라 거절한다.
+ *  그때는 콘텐츠 스크립트가 알려 오는 「이 화면은 PDF」로 대신 옮긴다(아래 onPdfDetected). */
+let headerRuleActive = false;
+
 async function syncPdfRule(settings) {
   const wanted = settings.enabled && settings.pdfAutoOpen;
-  const addRules = wanted
-    ? [{
-        id: PDF_RULE_ID,
-        priority: 1,
-        action: { type: "redirect", redirect: { regexSubstitution: `${VIEWER_PAGE}?file=\\0` } },
-        condition: { regexFilter: pdfUrl.PDF_RULE_REGEX, resourceTypes: ["main_frame"] },
-      }]
-    : [];
-  await chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds: [PDF_RULE_ID], addRules });
+  const urlRule = {
+    id: PDF_RULE_ID,
+    priority: 1,
+    action: { type: "redirect", redirect: { regexSubstitution: `${VIEWER_PAGE}?file=\\0` } },
+    condition: { regexFilter: pdfUrl.PDF_RULE_REGEX, resourceTypes: ["main_frame"] },
+  };
+  const removeRuleIds = [PDF_RULE_ID, pdfUrl.PDF_HEADER_RULE_ID];
+  if (!wanted) {
+    headerRuleActive = false;
+    await chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds, addRules: [] });
+    return;
+  }
+  try {
+    await chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds, addRules: [urlRule, pdfUrl.pdfHeaderRule(VIEWER_PAGE)] });
+    headerRuleActive = true;
+  } catch {
+    headerRuleActive = false;
+    await chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds, addRules: [urlRule] });
+  }
+}
+
+/** 서비스 워커가 다시 깨어나면 변수가 비므로, 걸려 있는 규칙을 보고 응답 머리 규칙 여부를 되살린다. */
+const headerRuleKnown = chrome.declarativeNetRequest
+  .getDynamicRules()
+  .then((rules) => {
+    headerRuleActive = rules.some((rule) => rule.id === pdfUrl.PDF_HEADER_RULE_ID);
+  })
+  .catch(() => {});
+
+/** 「원래 뷰어로 보기」를 고른 주소 — 콘텐츠 스크립트 쪽 옮기기도 이 주소는 건너뛴다(브라우저를 닫으면 지워진다). */
+const OPTED_OUT_KEY = "pdfOptedOut";
+async function optedOutUrls() {
+  try {
+    const kept = await chrome.storage.session.get(OPTED_OUT_KEY);
+    return Array.isArray(kept[OPTED_OUT_KEY]) ? kept[OPTED_OUT_KEY] : [];
+  } catch {
+    return [];
+  }
+}
+
+/** 탭마다 마지막으로 뷰어로 옮긴 주소·시각 — 같은 주소를 거듭 옮기는 되돌림을 막는다. */
+const recentRedirects = new Map();
+
+/** 콘텐츠 스크립트가 「이 화면은 PDF(Content-Type)」라고 알려 왔다 — 요청 규칙이 못 잡은 PDF를 뷰어로 옮긴다. */
+async function onPdfDetected(message, sender) {
+  if (!sender.tab || sender.tab.id === undefined) return { ok: true, opened: false, reason: "no-tab" };
+  await headerRuleKnown;
+  const settings = await config.load();
+  const url = String(sender.url || sender.tab.url || "");
+  const decision = pdfUrl.viewerDecision({
+    url,
+    contentType: String(message.contentType || ""),
+    frameId: sender.frameId,
+    enabled: settings.enabled,
+    autoOpen: settings.pdfAutoOpen,
+    headerRule: headerRuleActive,
+    viewerBase: VIEWER_PAGE,
+    optedOut: await optedOutUrls(),
+    recent: recentRedirects.get(sender.tab.id),
+    now: Date.now(),
+  });
+  if (!decision.open) return { ok: true, opened: false, reason: decision.reason };
+  recentRedirects.set(sender.tab.id, { url, at: Date.now() });
+  await chrome.tabs.update(sender.tab.id, { url: pdfUrl.viewerUrl(VIEWER_PAGE, url) });
+  return { ok: true, opened: true };
 }
 
 /** 「원래 뷰어로 보기」 — 그 주소 하나만 이번 브라우저 세션 동안 자동 열기에서 뺀다. */
 let nextSessionRuleId = 1000;
 async function openNative(tabId, url) {
   if (!/^https?:\/\//i.test(url)) throw new Error("이 주소는 원래 뷰어로 다시 열 수 없습니다.");
+  const opted = await optedOutUrls();
+  if (!opted.includes(url)) {
+    await chrome.storage.session.set({ [OPTED_OUT_KEY]: [...opted, url].slice(-200) }).catch(() => {});
+  }
   const escaped = url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const existing = await chrome.declarativeNetRequest.getSessionRules();
   if (!existing.some((rule) => rule.condition.regexFilter === `^${escaped}$`)) {
@@ -155,13 +219,20 @@ async function startRegion(tab) {
   try {
     await chrome.tabs.sendMessage(tab.id, { type: "pick-region" }, { frameId: 0 });
   } catch {
-    throw new Error("이 화면에서는 영역 번역을 쓸 수 없습니다(크롬 내부 화면·웹 스토어·크롬 기본 PDF 뷰어). 설치 전부터 열려 있던 탭이면 새로 고쳐 주세요.");
+    // 콘텐츠 스크립트가 없는 화면 — 주소로 까닭을 갈라 사람이 할 일을 알린다.
+    const kind = pageLimits.blockedKind(tab.url, pdfUrl.isPdfUrl);
+    throw Object.assign(new Error(pageLimits.blockedMessage(kind)), { kind });
   }
 }
 
 /** 결과 창 — 엔진은 주소의 ?engine=, 글은 # 뒤에 담는다. */
 function openResultWindow(text, engine = "google") {
   return chrome.windows.create({ url: `${RESULT_PAGE}?engine=${engine}#${encodeURIComponent(text)}`, type: "popup", width: 460, height: 440 });
+}
+
+/** 우클릭 메뉴로 시작한 일이 이 화면에서 안 될 때 — 까닭을 작은 창으로 알린다(정해 둔 까닭 이름만 넘긴다). */
+function openNoticeWindow(kind) {
+  return chrome.windows.create({ url: `${RESULT_PAGE}?notice=${encodeURIComponent(kind)}`, type: "popup", width: 460, height: 260 });
 }
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
@@ -183,8 +254,9 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     case "dt-region":
       try {
         await startRegion(tab);
-      } catch {
-        // 콘텐츠 스크립트가 없는 화면 — 우클릭 메뉴에는 알릴 자리가 없어 조용히 넘어간다(팝업 단추는 이유를 보인다).
+      } catch (error) {
+        // 콘텐츠 스크립트가 없는 화면 — 우클릭 메뉴에는 알릴 자리가 없어 작은 창으로 까닭을 보인다(팝업 단추는 팝업 안에 보인다).
+        await openNoticeWindow((error && error.kind) || "reload").catch(() => {});
       }
       return;
     case "dt-papago":
@@ -258,6 +330,8 @@ async function handle(message, sender) {
       await chrome.tabs.create({ url, index });
       return { ok: true };
     }
+    case "pdf-detected":
+      return onPdfDetected(message, sender);
     case "open-native":
       if (!sender.tab || sender.tab.id === undefined) throw new Error("탭을 찾지 못했습니다.");
       await openNative(sender.tab.id, String(message.url || ""));

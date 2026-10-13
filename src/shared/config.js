@@ -31,8 +31,12 @@
   const TRIGGERS = Object.freeze(["instant", "icon"]);
   const COPY_FORMATS = Object.freeze(["translation", "pair", "table"]);
 
-  /** 한 번에 번역하는 최대 글자 수(파파고 웹·구글 모두 이 안에서 안정적이다). */
-  const MAX_TEXT = 5000;
+  /** 한 번 드래그로 번역하는 최대 글자 수. 긴 글은 조각으로 나눠 보내므로(구글 4,500자·내 PC 700자) 넉넉히 둔다.
+   *  이보다 길면 앞부분만 번역하고 남은 양을 알린다. */
+  const MAX_TEXT = 30000;
+
+  /** 구글에 한 번에 보내는 글자 수 — 구글 번역 요청이 안정적으로 받는 크기(5,000자) 안쪽. */
+  const GOOGLE_CHUNK = 4500;
 
   /** 용어집 최대 글자 수. */
   const GLOSSARY_MAX = 20000;
@@ -145,6 +149,7 @@
     LOCAL_SERVERS,
     LOCAL_HOSTS,
     MAX_TEXT,
+    GOOGLE_CHUNK,
     DEFAULTS,
     languageName,
     normalizeServerUrl,

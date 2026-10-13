@@ -63,7 +63,7 @@
   }
 
   const COPY_FORMATS = Object.freeze(["translation", "pair", "table"]);
-  const COPY_FORMAT_NAMES = Object.freeze({ translation: "번역문만", pair: "원문과 번역 나란히", table: "표(원문|번역)" });
+  const COPY_FORMAT_NAMES = Object.freeze({ translation: "번역문만", pair: "원문과 번역 나란히(두 칸)", table: "표(원문|번역 제목 줄 포함)" });
 
   /** 탭 구분 칸 — 탭·줄바꿈·따옴표가 있으면 따옴표로 감싼다(엑셀이 한 칸으로 읽는다). */
   function tsvCell(value) {
@@ -74,23 +74,42 @@
   const escapeHtml = (value) =>
     String(value ?? "").replace(/[&<>"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[char]);
 
-  /** 복사할 글 만들기. table은 엑셀·한글이 표로 붙여 넣도록 탭 구분 글과 HTML 표를 함께 만든다. */
+  /** 칸 안 줄바꿈 — 엑셀은 이 표시(mso-data-placement)가 있어야 줄을 나누지 않고 한 칸 안에 둔다. 한글은 그냥 줄바꿈으로 읽는다. */
+  const CELL_BREAK = '<br style="mso-data-placement:same-cell">';
+
+  /** 표 HTML — 첫 줄을 제목 줄(th)로 쓸지 고른다. */
+  function htmlTable(rows, withHeader) {
+    const cell = (tag, value) =>
+      `<${tag} style="border:1px solid #999;padding:4px 6px;vertical-align:top">${escapeHtml(value).replace(/\n/g, CELL_BREAK)}</${tag}>`;
+    return (
+      '<table style="border-collapse:collapse">' +
+      rows.map((row, index) => `<tr>${row.map((value) => cell(withHeader && index === 0 ? "th" : "td", value)).join("")}</tr>`).join("") +
+      "</table>"
+    );
+  }
+
+  /** 복사할 글 만들기.
+   *  - translation: 번역문만(글).
+   *  - pair: 원문과 번역을 한 줄에 두 칸으로 — 탭 구분 글 + HTML 표(제목 줄 없음).
+   *  - table: pair에 「원문 | 번역」 제목 줄을 더한 표.
+   *  pair·table은 엑셀·한글이 표로 붙여 넣도록 text(탭 구분)와 html(표)을 함께 돌려준다. */
   function formatCopy(pairs, format) {
     const list = Array.isArray(pairs) ? pairs.filter((pair) => pair && (pair.source || pair.translation)) : [];
-    if (format === "pair") {
-      return { text: list.map((pair) => `${pair.source}\n${pair.translation}`).join("\n\n") };
-    }
-    if (format === "table") {
-      const rows = [["원문", "번역"], ...list.map((pair) => [pair.source, pair.translation])];
+    if (format === "pair" || format === "table") {
+      const body = list.map((pair) => [pair.source, pair.translation]);
+      const rows = format === "table" ? [["원문", "번역"], ...body] : body;
       const text = rows.map((row) => row.map(tsvCell).join("\t")).join("\n");
-      const cell = (tag, value) => `<${tag} style="border:1px solid #999;padding:4px 6px;vertical-align:top">${escapeHtml(value).replace(/\n/g, "<br>")}</${tag}>`;
-      const html =
-        '<table style="border-collapse:collapse">' +
-        rows.map((row, index) => `<tr>${row.map((value) => cell(index === 0 ? "th" : "td", value)).join("")}</tr>`).join("") +
-        "</table>";
-      return { text, html };
+      return { text, html: htmlTable(rows, format === "table") };
     }
     return { text: list.map((pair) => pair.translation).join("\n\n") };
+  }
+
+  /** 진행 표시 글 — 조각이 여럿이면 몇째 조각인지와 백분율을 함께 보인다(긴 글에서도 0~100%를 넘지 않는다). */
+  function progressLabel(prefix, done, total) {
+    const all = Math.max(0, Math.floor(Number(total) || 0));
+    if (all <= 1) return prefix;
+    const finished = Math.min(all, Math.max(0, Math.floor(Number(done) || 0)));
+    return `${prefix} ${finished}/${all} 조각 (${Math.floor((finished / all) * 100)}%)`;
   }
 
   /* ── 긴 글 나누기(6단계) ── */
@@ -218,6 +237,7 @@
     COPY_FORMAT_NAMES,
     tsvCell,
     formatCopy,
+    progressLabel,
     CHUNK_SIZE,
     splitForTranslation,
     assemble,

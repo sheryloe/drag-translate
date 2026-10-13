@@ -5,6 +5,12 @@
   if (window.__dragTranslateLoaded) return;
   window.__dragTranslateLoaded = true;
 
+  // 주소가 .pdf로 끝나지 않는 PDF(download?id=123 같은 것) — 맨 위 화면이 PDF면 서비스 워커에 알린다.
+  // 옮길지는 서비스 워커가 정한다(설정·「원래 뷰어로 보기」·되돌림 막기·요청 규칙이 이미 맡았는지).
+  if (window === window.top && /^application\/(x-)?pdf$/i.test(document.contentType || "")) {
+    chrome.runtime.sendMessage({ type: "pdf-detected", contentType: document.contentType }).catch(() => {});
+  }
+
   const translator = globalThis.DT.ui.attachSelectionTranslator();
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {

@@ -180,9 +180,10 @@
       this.fab.hidden = true;
       // PDF처럼 줄 끝마다 끊긴 문장은 합쳐서 번역해야 뜻이 바로 선다.
       const prepared = settings.joinLines === false ? rawText : DT.text.joinBrokenLines(rawText);
-      const { text, clipped } = DT.engines.clip(prepared, DT.config.MAX_TEXT);
+      const { text, clipped, omitted } = DT.engines.clip(prepared, DT.config.MAX_TEXT);
       this.text = text;
       this.clipped = clipped;
+      this.omitted = omitted || 0;
       this.engine = settings.engine;
       this.lang = settings.targetLang;
       this.copyFormat = settings.copyFormat || DT.config.DEFAULTS.copyFormat;
@@ -277,7 +278,10 @@
       }
 
       const children = [el("div", { class: "head" }, [engines, select, copy, close]), this.body];
-      if (this.clipped) children.push(el("div", { class: "note", text: `글이 길어 앞 ${DT.config.MAX_TEXT.toLocaleString("ko-KR")}자만 번역합니다.` }));
+      if (this.clipped) children.push(el("div", { class: "note", text: DT.engines.clipNote(this.text.length, this.omitted) }));
+      else if (this.engine === "papago" && this.text.length > DT.engines.WEB_MAX) {
+        children.push(el("div", { class: "note", text: `파파고 사이트는 한 번에 ${DT.engines.WEB_MAX.toLocaleString("ko-KR")}자까지 받아 앞부분만 보냅니다.` }));
+      }
       children.push(el("div", { class: "foot" }, foot));
       this.card.replaceChildren(...children);
 
@@ -328,7 +332,9 @@
       this.result = "";
       this.pairs = null;
       this.detectedLabel.textContent = engine === "local" ? "내 PC 번역 · 밖으로 보내지 않음" : "";
-      if (engine === "local") return this.translateLocal(token);
+      if (engine === "local") return this.translateChunks(token, "local");
+      // 구글이 한 번에 받는 양보다 길면 큰 조각으로 나눠 차례로 보낸다.
+      if (this.text.length > DT.config.GOOGLE_CHUNK) return this.translateChunks(token, "google");
       this.body.className = "body loading";
       this.body.textContent = "번역 중…";
       this.position();
@@ -346,15 +352,19 @@
       this.position();
     }
 
-    /** 내 PC 번역 — 긴 글은 문단·문장 조각으로 나눠 차례로(설정한 수만큼 함께) 보내고, 끝난 앞부분부터 보인다.
-     *  조각마다 짧게 묻는 편이 작은 모델에 빠르고 정확하며, 같은 조각은 서비스 워커가 기억해 다시 묻지 않는다. */
-    async translateLocal(token) {
-      const chunks = DT.text.splitForTranslation(this.text);
+    /** 조각 번역 — 긴 글은 문단·문장 조각으로 나눠 차례로 보내고, 끝난 앞부분부터 보인다.
+     *  내 PC: 700자 조각을 설정한 수만큼 함께. 조각마다 짧게 묻는 편이 작은 모델에 빠르고 정확하다.
+     *  구글: 4,500자 조각을 하나씩(요청이 잦으면 구글이 막는다).
+     *  같은 조각은 서비스 워커가 기억해 다시 묻지 않는다. */
+    async translateChunks(token, engine) {
+      const isLocal = engine === "local";
+      const chunks = DT.text.splitForTranslation(this.text, isLocal ? DT.text.CHUNK_SIZE : DT.config.GOOGLE_CHUNK);
       const total = chunks.length;
       const results = new Array(total);
       let done = 0;
       let next = 0;
-      const label = () => (total > 1 ? `내 PC에서 번역 중… ${done}/${total} 조각` : "내 PC에서 번역 중…");
+      let detected = null;
+      const label = () => DT.text.progressLabel(isLocal ? "내 PC에서 번역 중…" : "번역 중…", done, total);
       this.showProgress(label());
       this.startTimer(token, label);
       this.position();
@@ -366,16 +376,17 @@
       const worker = async () => {
         while (next < total) {
           const index = next++;
-          const reply = await DT.bridge.translate(chunks[index].text, this.lang, "local");
+          const reply = await DT.bridge.translate(chunks[index].text, this.lang, engine);
           if (token !== this.token) return;
           results[index] = reply.text;
+          if (!detected && reply.detected) detected = reply.detected;
           done += 1;
           this.tick();
           showPartial();
           this.position();
         }
       };
-      const parallel = Math.max(1, Math.min(4, this.parallel || 1, total));
+      const parallel = isLocal ? Math.max(1, Math.min(4, this.parallel || 1, total)) : 1;
       try {
         await Promise.all(Array.from({ length: parallel }, worker));
         if (token !== this.token) return;
@@ -384,6 +395,7 @@
         this.pairs = pairs;
         this.body.className = "body";
         this.body.textContent = text;
+        if (detected) this.detectedLabel.textContent = `원문: ${DT.config.languageName(detected)}`;
       } catch (error) {
         if (token !== this.token) return;
         this.showError(error);
@@ -416,7 +428,7 @@
       if (this.translatesInPlace) this.translate();
     }
 
-    /** 복사 — 고른 방식(번역문만·나란히·표)으로. 표는 HTML 표도 함께 넣어 엑셀·한글에 표로 붙는다. */
+    /** 복사 — 고른 방식(번역문만·나란히·표)으로. 나란히·표는 HTML 표와 탭 구분 글을 함께 넣어 엑셀·한글에 표로 붙는다. */
     async copy(button) {
       if (!this.result) return;
       const pairs = this.pairs && this.pairs.length ? this.pairs : DT.text.pairParagraphs(this.text, this.result);
@@ -433,12 +445,18 @@
           await navigator.clipboard.writeText(text);
         }
       } catch {
-        const area = el("textarea", {});
-        area.value = text;
-        this.card.append(area);
-        area.select();
-        document.execCommand("copy");
-        area.remove();
+        // 페이지가 클립보드 API를 막았을 때 — 복사 이벤트에서 두 모양을 직접 넣는다(HTML 표를 잃지 않게).
+        const onCopy = (event) => {
+          event.clipboardData.setData("text/plain", text);
+          if (html) event.clipboardData.setData("text/html", html);
+          event.preventDefault();
+        };
+        document.addEventListener("copy", onCopy, true);
+        try {
+          document.execCommand("copy");
+        } finally {
+          document.removeEventListener("copy", onCopy, true);
+        }
       }
       button.textContent = "복사됨";
       setTimeout(() => (button.textContent = "복사"), 1200);

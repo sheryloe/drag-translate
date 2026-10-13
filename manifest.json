@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "드래그 번역 (Drag Translate)",
   "short_name": "드래그 번역",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "웹 페이지와 PDF에서 글자를 드래그하면 바로 번역합니다. 구글은 그 자리에서, 파파고는 새 탭으로, 보안 문서는 내 PC 언어 모델로 밖에 보내지 않고 번역합니다.",
   "minimum_chrome_version": "120",
   "icons": {

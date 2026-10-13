@@ -1,6 +1,7 @@
 /* 배포용 zip 만들기 — npm run pack
  * 외부 도구 없이 노드 내장 zlib만으로 dist/drag-translate-<버전>.zip을 만든다.
- * 크롬에 올리는 데 필요한 파일(manifest·icons·src·vendor·models·README)만 넣고, 시험·개발 도구·캐시는 뺀다.
+ * 크롬에 올리는 데 필요한 파일(manifest·icons·src·vendor·models·README)과 직원용 설치 안내(docs/설치안내.md)만 넣고,
+ * 시험·개발 도구·캐시·docs의 나머지(스크린숏 등)는 뺀다.
  * zip을 풀어 그 폴더를 「압축해제된 확장 프로그램을 로드합니다」로 고르면 된다. */
 import { readFileSync, readdirSync, statSync, mkdirSync, writeFileSync } from "node:fs";
 import { join, relative, sep, dirname } from "node:path";
@@ -9,8 +10,10 @@ import zlib from "node:zlib";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-/** 넣을 것 — 맨 위 이름 기준. */
-export const INCLUDE = ["manifest.json", "README.md", "icons", "src", "vendor", "models"];
+/** 설치본에 꼭 있어야 하는 직원용 설치 안내. */
+export const GUIDE = "docs/설치안내.md";
+/** 넣을 것 — 맨 위 이름(또는 파일 하나의 상대 경로) 기준. */
+export const INCLUDE = ["manifest.json", "README.md", GUIDE, "icons", "src", "vendor", "models"];
 /** 어디에 있든 뺄 것. */
 const EXCLUDE = /(^|\/)(node_modules|\.cache|\.git|test|dist)(\/|$)|(^|\/)(\.DS_Store|Thumbs\.db)$|\.test\.js$/;
 
@@ -114,6 +117,9 @@ export function buildZip(entries) {
 export function pack(root = ROOT) {
   const manifest = JSON.parse(readFileSync(join(root, "manifest.json"), "utf8"));
   const files = listFiles(root);
+  for (const need of ["manifest.json", GUIDE]) {
+    if (!files.includes(need)) throw new Error(`설치본에 넣을 ${need}이(가) 없습니다.`);
+  }
   const zip = buildZip(files.map((name) => ({ name, data: readFileSync(join(root, name)) })));
   const outDir = join(root, "dist");
   mkdirSync(outDir, { recursive: true });

@@ -10,6 +10,33 @@ const PDF_RULE_ID = 1;
 const OPEN_TAB_HOSTS = ["papago.naver.com", "translate.google.com"];
 const PDF_LINK_PATTERNS = ["*://*/*.pdf", "*://*/*.PDF", "*://*/*.pdf?*", "*://*/*.PDF?*"];
 
+/* ── 내 PC 서버 요청 준비 ───────────────────────────── */
+
+/** 내 PC 서버로 가는 이 확장의 요청은 출처를 http://127.0.0.1로 바꿔 보낸다 — Ollama 기본 설정의 403을 피한다.
+ *  서비스 워커가 깨어날 때마다 다시 건다(같은 ID를 지우고 넣으므로 겹치지 않는다). 실패하면 403 안내로 넘어간다. */
+const originReady = chrome.declarativeNetRequest
+  .updateDynamicRules({ removeRuleIds: [local.ORIGIN_RULE_ID], addRules: [local.localOriginRule(chrome.runtime.id)] })
+  .catch(() => {});
+
+/** 서비스 워커 깨워 두기 — 크롬은 30초 넘게 응답을 기다리는 fetch가 있거나 30초 동안 할 일이 없으면 워커를 끝낸다.
+ *  내 PC 모델은 처음 불러올 때 30초 가까이 걸리므로(실측: exaone3.5:7.8b 첫 번역 26.5초) 일하는 동안 20초마다
+ *  확장 API를 불러 시계를 되돌린다. 일이 모두 끝나면 멈춘다. */
+let busyCount = 0;
+let awakeTimer = 0;
+async function keepAwake(work) {
+  busyCount += 1;
+  if (!awakeTimer) awakeTimer = setInterval(() => chrome.runtime.getPlatformInfo().catch(() => {}), 20_000);
+  try {
+    return await work();
+  } finally {
+    busyCount -= 1;
+    if (!busyCount) {
+      clearInterval(awakeTimer);
+      awakeTimer = 0;
+    }
+  }
+}
+
 /* ── 번역 ─────────────────────────────────────────── */
 
 /** 번역 결과를 메모리에만 담아 같은 글을 다시 묻지 않는다(디스크에는 남기지 않는다).
@@ -241,7 +268,10 @@ async function handle(message, sender) {
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  handle(message, sender).then(sendResponse, (error) => sendResponse({ ok: false, error: error && error.message ? error.message : String(error) }));
+  keepAwake(async () => {
+    await originReady;
+    return handle(message, sender);
+  }).then(sendResponse, (error) => sendResponse({ ok: false, error: error && error.message ? error.message : String(error) }));
   return true;
 });
 
@@ -256,8 +286,9 @@ chrome.runtime.onConnect.addListener((port) => {
   if (port.name !== "local-pull" || !fromExtensionPage(port.sender)) return;
   const controller = new AbortController();
   port.onDisconnect.addListener(() => controller.abort());
-  port.onMessage.addListener(async (message) => {
+  port.onMessage.addListener((message) => keepAwake(async () => {
     try {
+      await originReady;
       const settings = await config.load();
       await local.pullModel(
         local.optionsFrom(settings),
@@ -273,7 +304,7 @@ chrome.runtime.onConnect.addListener((port) => {
     } catch (error) {
       if (!controller.signal.aborted) port.postMessage({ error: error && error.message ? error.message : String(error) });
     }
-  });
+  }));
 });
 
 /* ── 시작 ─────────────────────────────────────────── */

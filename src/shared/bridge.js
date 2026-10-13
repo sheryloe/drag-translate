@@ -3,18 +3,28 @@
 (function (root) {
   "use strict";
 
+  /** 메시지를 못 주고받은 까닭 → 사람이 할 일. 확장을 새로 고친 탭과, 답을 주기 전에 배경 작업이 끝난 경우를 가른다. */
+  function explainSendError(error) {
+    const detail = String((error && error.message) || error || "");
+    if (/message port closed|message channel closed/i.test(detail)) {
+      return "확장 프로그램의 배경 작업이 답을 주기 전에 멈췄습니다. 한 번 더 시도해 주세요. 되풀이되면 크롬을 다시 켜거나 더 작은 모델을 고르세요.";
+    }
+    return "확장 프로그램이 다시 로드되었습니다. 페이지를 새로 고친 뒤 다시 시도해 주세요.";
+  }
+
   async function call(message) {
     let reply;
     try {
       reply = await chrome.runtime.sendMessage(message);
-    } catch {
-      throw new Error("확장 프로그램이 다시 로드되었습니다. 페이지를 새로 고친 뒤 다시 시도해 주세요.");
+    } catch (error) {
+      throw new Error(explainSendError(error));
     }
     if (!reply || reply.ok !== true) throw new Error((reply && reply.error) || "알 수 없는 오류가 났습니다.");
     return reply;
   }
 
   const api = {
+    explainSendError,
     translate: (text, targetLang, engine) => call({ type: "translate", text, targetLang, engine }),
     testLocal: (opts) => call({ type: "local-test", opts }),
     listLocalModels: () => call({ type: "local-models" }),
@@ -25,4 +35,5 @@
     openTab: (url) => call({ type: "open-tab", url }),
   };
   root.DT = Object.assign(root.DT || {}, { bridge: api });
+  if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(globalThis);

@@ -10,6 +10,7 @@ import { dirname, join } from "node:path";
 const require = createRequire(import.meta.url);
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const local = require(join(root, "src/shared/local-llm.js"));
+const textTools = require(join(root, "src/shared/text-tools.js"));
 
 const SERVER = "http://localhost:11434";
 const textModel = process.argv[2] || "translategemma:4b";
@@ -31,6 +32,14 @@ async function unload(model) {
 }
 
 console.log(`번역 모델: ${textModel} / 그림 읽기 모델: ${visionModel}`);
+
+// 확장 출처 확인 — 크롬 확장은 요청에 「Origin: chrome-extension://…」을 붙인다. 노드는 붙이지 않으므로 직접 붙여 본다.
+// 확장은 이 출처를 local.LOCAL_ORIGIN으로 바꿔 보내도록 요청 규칙을 건다(background.js).
+for (const origin of ["chrome-extension://abcdefghijklmnop", local.LOCAL_ORIGIN]) {
+  const response = await fetch(`${SERVER}/api/tags`, { headers: { Origin: origin } }).catch(() => null);
+  console.log(`[출처 확인] Origin: ${origin} → ${response ? response.status : "연결 실패"}`);
+}
+
 await unload(textModel);
 await unload(visionModel);
 for (const [index, [label, text, lang]] of CASES.entries()) {
@@ -40,6 +49,28 @@ for (const [index, [label, text, lang]] of CASES.entries()) {
     console.log(`[${label}] ${seconds(start)}초${index === 0 ? " (첫 번역, 모델 불러오기 포함)" : ""}\n  ${text}\n  → ${out}`);
   } catch (error) {
     console.log(`[${label}] 오류: ${error.message}`);
+  }
+}
+
+// 긴 글 — 번역 창과 같은 방법(text-tools.js 나누기 → 조각마다 번역 → 이어 붙이기)으로 잰다.
+const LONG = [
+  "The reactor protection system (RPS) shall initiate a reactor trip when any monitored parameter exceeds its setpoint. Each channel is tested periodically to confirm that the trip function remains available. The test interval is defined in the technical specifications.",
+  "Software changes for safety-related systems must follow the configuration management procedure. Every change request is reviewed by an independent verification team before it is approved. Test results and review records are kept for the life of the plant.",
+  "Operators shall be notified of any bypassed channel through the main control room display. When two channels are bypassed at the same time, the plant must be placed in a safe state within six hours. This requirement applies in all operating modes.",
+].join("\n\n").repeat(2);
+{
+  const chunks = textTools.splitForTranslation(LONG);
+  const start = Date.now();
+  const results = [];
+  try {
+    for (const [index, chunk] of chunks.entries()) {
+      results.push((await local.translateLocal(chunk.text, "ko", opts)).text);
+      console.log(`[긴 글] ${index + 1}/${chunks.length} 조각 ${seconds(start)}초`);
+    }
+    const { text } = textTools.assemble(chunks, results);
+    console.log(`[긴 글] ${LONG.length}자 → ${chunks.length}조각, 모두 ${seconds(start)}초\n  ${text.slice(0, 200).replace(/\n/g, " ")}…`);
+  } catch (error) {
+    console.log(`[긴 글] 오류: ${error.message}`);
   }
 }
 

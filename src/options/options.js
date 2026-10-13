@@ -252,15 +252,26 @@
     }
   });
 
-  /** 고른 사양은 이 PC에만 기억한다. */
-  const { pcSpec } = await chrome.storage.local.get("pcSpec");
-  if (pcSpec) {
-    $("specRam").value = String(pcSpec.ram);
-    $("specVram").value = String(pcSpec.vram);
-  } else {
-    $("specRam").value = "16";
-    $("specVram").value = "0";
+  /** 그래픽카드 이름 — WebGL이 알려 주는 렌더러(없거나 막혀 있으면 빈 글). */
+  function gpuRenderer() {
+    try {
+      const gl = document.createElement("canvas").getContext("webgl");
+      if (!gl) return "";
+      const info = gl.getExtension("WEBGL_debug_renderer_info");
+      return String(gl.getParameter(info ? info.UNMASKED_RENDERER_WEBGL : gl.RENDERER) || "");
+    } catch {
+      return "";
+    }
   }
+
+  /** 이 PC 사양 어림 — 판정은 models.js의 순수 함수(guessSpec)가 한다. */
+  const guess = DT.models.guessSpec({ deviceMemory: navigator.deviceMemory, cores: navigator.hardwareConcurrency, renderer: gpuRenderer() });
+  $("specGuess").textContent = `자동 판정: ${guess.tierLabel} — ${guess.reason}`;
+
+  /** 고른 사양은 이 PC에만 기억한다. 고른 적이 없으면 자동 판정으로 채운다. */
+  const { pcSpec } = await chrome.storage.local.get("pcSpec");
+  $("specRam").value = String(pcSpec ? pcSpec.ram : guess.ram);
+  $("specVram").value = String(pcSpec ? pcSpec.vram : guess.vram);
   for (const id of ["specRam", "specVram"]) {
     $(id).addEventListener("change", () => {
       chrome.storage.local.set({ pcSpec: { ram: Number($("specRam").value), vram: Number($("specVram").value) } });

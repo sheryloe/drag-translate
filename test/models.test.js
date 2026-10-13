@@ -47,6 +47,50 @@ test("비상업 라이선스 모델은 추천에 나오지 않는다", () => {
   }
 });
 
+test("그래픽카드 이름으로 그래픽 메모리 어림 — 내장 그래픽·소프트웨어 렌더러는 0", () => {
+  const cases = [
+    ["ANGLE (NVIDIA, NVIDIA GeForce RTX 4060 Laptop GPU (0x000028E0) Direct3D11 vs_5_0 ps_5_0, D3D11)", 8],
+    ["ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Laptop GPU Direct3D11 vs_5_0 ps_5_0, D3D11)", 6],
+    ["ANGLE (NVIDIA, NVIDIA GeForce RTX 3050 Ti Laptop GPU Direct3D11 vs_5_0 ps_5_0, D3D11)", 4],
+    ["ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 Direct3D11 vs_5_0 ps_5_0, D3D11)", 8],
+    ["ANGLE (NVIDIA, NVIDIA GeForce GTX 1650 Direct3D11 vs_5_0 ps_5_0, D3D11)", 4],
+    ["ANGLE (AMD, AMD Radeon RX 6600M Direct3D11 vs_5_0 ps_5_0, D3D11)", 4],
+    ["ANGLE (Intel, Intel(R) UHD Graphics 620 Direct3D11 vs_5_0 ps_5_0, D3D11)", 0],
+    ["ANGLE (Intel, Intel(R) Iris(R) Xe Graphics Direct3D11 vs_5_0 ps_5_0, D3D11)", 0],
+    ["ANGLE (AMD, AMD Radeon(TM) Graphics Direct3D11 vs_5_0 ps_5_0, D3D11)", 0],
+    ["ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)", 0],
+    ["", 0],
+  ];
+  for (const [renderer, vram] of cases) assert.equal(models.guessVram(renderer), vram, renderer);
+});
+
+test("PC 정보로 가벼운/보통 모델 판정과 이유 한 줄", () => {
+  const laptop = models.guessSpec({
+    deviceMemory: 8,
+    cores: 16,
+    renderer: "ANGLE (NVIDIA, NVIDIA GeForce RTX 4060 Laptop GPU (0x000028E0) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+  });
+  assert.deepEqual([laptop.ram, laptop.vram, laptop.tier, laptop.tierLabel], [32, 8, "normal", "보통 모델 권장"]);
+  assert.match(laptop.reason, /NVIDIA GeForce RTX 4060 Laptop GPU/);
+  assert.doesNotMatch(laptop.reason, /ANGLE|Direct3D|0x/);
+
+  const office = models.guessSpec({ deviceMemory: 8, cores: 8, renderer: "ANGLE (Intel, Intel(R) UHD Graphics 620 Direct3D11 vs_5_0 ps_5_0, D3D11)" });
+  assert.deepEqual([office.ram, office.vram, office.tier, office.tierLabel], [16, 0, "light", "가벼운 모델 권장"]);
+  assert.match(office.reason, /내장 그래픽 Intel\(R\) UHD Graphics 620/);
+  assert.match(office.reason, /CPU로만/);
+
+  const small = models.guessSpec({ deviceMemory: 4, cores: 4 });
+  assert.deepEqual([small.ram, small.vram, small.tier], [8, 0, "light"]);
+  assert.match(small.reason, /그래픽카드 확인 못 함/);
+
+  const unknown = models.guessSpec();
+  assert.equal(unknown.tier, "light", "아무것도 모르면 가벼운 쪽으로");
+  for (const spec of [laptop, office, small, unknown]) {
+    assert.ok(models.RAM_CHOICES.includes(spec.ram) && models.VRAM_CHOICES.includes(spec.vram), "설정 화면의 칸에 그대로 넣을 수 있다");
+    assert.equal(spec.reason.split("\n").length, 1, "이유는 한 줄");
+  }
+});
+
 test("models/*.Modelfile은 맞춤 모델 정의와 같다", () => {
   for (const custom of models.CUSTOM_MODELS) {
     const file = readFileSync(join(__dirname, "..", "models", `${custom.name}.Modelfile`), "utf8");

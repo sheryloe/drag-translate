@@ -1,0 +1,32 @@
+# 원자력 계측제어 실무 용어 — 실측(bench-local --glossary)용 예시 용어집. 설정 화면 「용어집」에 그대로 붙여 쓸 수 있다.
+# 한 줄에 「한국어 = 영어」. 반대 방향 번역에도 뒤집어 쓴다.
+# 주의: 이 용어집에는 bench/samples.json에 나오는 용어가 들어 있어, 용어집을 넣은 실측은 「용어집을 잘 갖춘 경우」의 결과다.
+계측제어 = instrumentation and control
+압력 전송기 = pressure transmitter
+형상관리 = configuration management
+형상 항목 = configuration item
+기준선 = baseline
+형상통제위원회 = configuration control board
+변경 통제 위원회 = change control board
+트립 설정값 = trip setpoint
+조정 전 값 = as-found
+조정 후 값 = as-left
+부적합 보고서 = nonconformance report
+부적합 사항 = nonconformance
+시정 조치 = corrective action
+편차 기록부 = deviation log
+시험 절차서 = test procedure
+시험 책임자 = test supervisor
+시험 = test
+원자로보호계통 = reactor protection system
+안전 등급 = safety class
+품질보증 = quality assurance
+교정 = calibration
+격리 장치 = isolation device
+버전 기술 문서 = version description document
+단일고장기준 = single failure criterion
+다중성 = redundancy
+다양성 = diversity
+공통원인고장 = common cause failure
+확인 및 검증 = verification and validation
+소프트웨어 요구사항 명세서 = software requirements specification

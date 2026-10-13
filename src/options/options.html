@@ -124,7 +124,8 @@
 
       <section class="card" id="modelSection">
         <h2>내 PC에 맞는 모델</h2>
-        <p class="muted note">번역은 작고 빠른 모델이 먼저입니다. PC 사양을 고르면 번역용·그림 읽기용 모델을 추천합니다. 「받기」는 누를 때만 Ollama가 모델을 내려받습니다(Ollama 전용).</p>
+        <p class="muted note">번역은 작고 빠른 모델이 먼저입니다. 처음에는 이 PC의 메모리·CPU·그래픽카드를 어림해 사양 칸을 채우고, 직접 고치면 그 값으로 추천합니다. 「받기」는 누를 때만 Ollama가 모델을 내려받습니다(Ollama 전용).</p>
+        <p id="specGuess" class="result" role="status"></p>
         <div class="field">
           <label class="label" for="specRam">메모리(RAM)</label>
           <select id="specRam">

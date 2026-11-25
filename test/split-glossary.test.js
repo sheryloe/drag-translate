@@ -91,6 +91,8 @@ test("용어집 번역어를 띄어쓰기만 달리 쓰면 바로잡는다", asy
   assert.equal(local.applyGlossarySpacing("원자로 보호 계통과 형상 관리", lines), "원자로보호계통과 형상관리");
   assert.equal(local.applyGlossarySpacing("원자로보호계통", lines), "원자로보호계통");
   assert.equal(local.applyGlossarySpacing("다른 말", lines), "다른 말");
+  // 줄바꿈을 넘어서는 맞추지 않는다 — 문단 나눔이 지워지면 안 된다.
+  assert.equal(local.applyGlossarySpacing("원자로\n\n보호계통", lines), "원자로\n\n보호계통");
   const { fakeFetch } = require("./fake-fetch.js");
   const reply = await local.translateLocal("reactor protection system", "ko", { mode: "ollama", server: "http://localhost:11434", model: "drag-translate", timeout: 5 }, fakeFetch({ json: { message: { content: "원자로 보호 계통" } } }), lines);
   assert.equal(reply.text, "원자로보호계통");

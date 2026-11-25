@@ -46,6 +46,11 @@ test("긴 글은 앞부분만 남기고 잘렸다고 알린다", () => {
   assert.deepEqual(engines.clip("abcdefgh", 5), { text: "abcde", clipped: true, omitted: 3 });
 });
 
+test("자르기는 줄 끝 빈칸만 지우고 문단 사이 빈 줄은 남긴다", () => {
+  // 실제 크롬 시험(2026-11-25): \s+\n이 빈 줄까지 먹어 문단 셋이 번역 창에서 둘로 붙었다.
+  assert.equal(engines.clip("첫 문단.  \n\n둘째 문단.\t\n셋째 줄.\n\n\n넷째", 100).text, "첫 문단.\n\n둘째 문단.\n셋째 줄.\n\n\n넷째");
+});
+
 test("자를 때 끝 1할 안에 문단·문장 끝이 있으면 거기서 자르고, 남은 글자 수를 센다", () => {
   const sentence = "A".repeat(95) + ". "; // 97자
   const long = sentence.repeat(400).trim(); // 38,800자 남짓

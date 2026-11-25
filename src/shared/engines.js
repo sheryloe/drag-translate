@@ -11,7 +11,8 @@
   /** 너무 긴 선택은 앞부분만 쓴다. clipped가 true면 화면에 알리고, omitted(번역하지 않은 글자 수)를 함께 보인다.
    *  끝 1할 안에 문단·문장 끝이 있으면 거기서 잘라 문장이 중간에 끊기지 않게 한다. */
   function clip(text, max) {
-    const clean = String(text ?? "").replace(/\s+\n/g, "\n").trim();
+    // 줄 끝 빈칸만 지운다 — \s는 줄바꿈도 잡아 문단 사이 빈 줄(\n\n)을 한 줄바꿈으로 줄였다(실제 크롬 시험에서 문단 셋이 둘로 붙음).
+    const clean = String(text ?? "").replace(/[^\S\n]+\n/g, "\n").trim();
     if (clean.length <= max) return { text: clean, clipped: false, omitted: 0 };
     const head = clean.slice(0, max);
     const floor = Math.floor(max * 0.9);

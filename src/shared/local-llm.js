@@ -154,7 +154,8 @@
       const target = line.slice(at + 3).trim();
       const letters = [...target.replace(/\s+/g, "")];
       if (letters.length < 2 || text.includes(target)) continue;
-      const pattern = new RegExp(letters.map((char) => char.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("\\s*"), "g");
+      // 글자 사이는 가로 빈칸만 허용한다 — 줄바꿈을 넘어 맞추면 그 줄바꿈(문단 나눔)이 지워진다.
+      const pattern = new RegExp(letters.map((char) => char.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("[^\\S\\n]*"), "g");
       text = text.replace(pattern, target);
     }
     return text;
